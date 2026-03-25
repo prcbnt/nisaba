@@ -41,27 +41,7 @@ jobs:
       # ── 3. Diagnostic données ─────────────────────────────────────────────
       - name: Diagnose data fetch
         run: |
-          python - <<'EOF'
-          import sys
-          sys.path.insert(0, '.')
-          from src.data_fetcher import DataFetcher
-          from src.momentum_scorer import MomentumScorer
-          from pathlib import Path
-          import warnings; warnings.filterwarnings('ignore')
-
-          fetcher = DataFetcher(Path('config'))
-          scorer  = MomentumScorer(Path('config'))
-
-          print(f"fetch_period_days = {fetcher.fetch_period_days}")
-          prices = fetcher.get_processed_prices()
-          print(f"Lignes DataFrame  = {len(prices)}")
-          ranked = scorer.compute_scores(prices)
-          for _, r in ranked.iterrows():
-              n = len(prices[r['ticker']].dropna())
-              print(f"  {r['ticker']:<12} {r['status']:<26} {n} jours")
-          eligible = (ranked['status'] == '✓').sum()
-          print(f"\n→ {eligible} éligibles / {len(ranked)}")
-          EOF
+          python scripts/diagnose.py
 
       # ── 4. Déterminer le type de run ──────────────────────────────────────
       - name: Detect run type
