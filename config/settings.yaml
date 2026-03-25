@@ -19,7 +19,7 @@ email:
   # EMAIL_RECIPIENT     → override optionnel de l'adresse destinataire
 
 data:
-  fetch_period_days: 260  # Historique à télécharger (>200j pour MM200)
+  fetch_period_days: 400  # Historique à télécharger (400j calendaires ≈ 285j de bourse, nécessaire pour MM200)
 
 backtest:
   default_start: "2020-01-01"   # Date de début par défaut du backtest
