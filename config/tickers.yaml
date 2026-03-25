@@ -1,5 +1,9 @@
-# Univers des 21 ETFs — 3 zones × 7 secteurs
-# Cotation : US et EM en USD, Europe en EUR (Xetra)
+# Univers des 21 ETFs — US (7 secteurs) + Europe (7 secteurs) + International (7 zones géo)
+# Cotation : US et International en USD, Europe en EUR (Xetra)
+#
+# La colonne "International" remplace l'ancienne colonne EM sectorielle.
+# Approche géographique : Asie (FXI, INDA, EWY), Amérique Latine (EWZ, ILF),
+#                         MENA (KSA), Japon (EWJ)
 
 universe:
   # ── Technologie ──────────────────────────────────────────────────────────
@@ -15,10 +19,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: KWEB
-    name: "KraneShares CSI China Internet"
-    sector: Technologie
-    region: EM
+  - ticker: FXI
+    name: "iShares China Large-Cap ETF"
+    sector: Chine
+    region: Asie
     currency: USD
 
   # ── Santé ─────────────────────────────────────────────────────────────────
@@ -34,10 +38,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: EMHC
-    name: "iShares MSCI EM Health Care"
-    sector: Santé
-    region: EM
+  - ticker: INDA
+    name: "iShares MSCI India ETF"
+    sector: Inde
+    region: Asie
     currency: USD
 
   # ── Finance ───────────────────────────────────────────────────────────────
@@ -53,10 +57,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: FEMS
-    name: "First Trust EM Small Cap AlphaDEX"
-    sector: Finance
-    region: EM
+  - ticker: EWY
+    name: "iShares MSCI South Korea ETF"
+    sector: Corée du Sud
+    region: Asie
     currency: USD
 
   # ── Industrie ─────────────────────────────────────────────────────────────
@@ -72,10 +76,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: XSOE
-    name: "WisdomTree EM ex-State Owned Enterprises"
-    sector: Industrie
-    region: EM
+  - ticker: EWZ
+    name: "iShares MSCI Brazil ETF"
+    sector: Brésil
+    region: Amérique Latine
     currency: USD
 
   # ── Biens de consommation ─────────────────────────────────────────────────
@@ -91,10 +95,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: EMQQ
-    name: "EM Internet & Ecommerce ETF"
-    sector: Consommation
-    region: EM
+  - ticker: ILF
+    name: "iShares Latin America 40 ETF"
+    sector: Amérique Latine
+    region: Amérique Latine
     currency: USD
 
   # ── Énergie ───────────────────────────────────────────────────────────────
@@ -110,10 +114,10 @@ universe:
     region: Europe
     currency: EUR
 
-  - ticker: IXC
-    name: "iShares Global Energy ETF"
-    sector: Énergie
-    region: EM
+  - ticker: KSA
+    name: "iShares MSCI Saudi Arabia ETF"
+    sector: Arabie Saoudite
+    region: MENA
     currency: USD
 
   # ── Défense ───────────────────────────────────────────────────────────────
@@ -127,13 +131,13 @@ universe:
     name: "iShares MSCI Europe Aerospace & Defense"
     sector: Défense
     region: Europe
-    # Note: EUAD est sur CBOE Europe, coté en USD. Ajuster si cotation EUR.
+    # Note: EUAD est sur CBOE Europe, coté en USD.
     currency: USD
 
-  - ticker: EMXC
-    name: "iShares MSCI EM ex-China ETF"
-    sector: Défense
-    region: EM
+  - ticker: EWJ
+    name: "iShares MSCI Japan ETF"
+    sector: Japon
+    region: Japon
     currency: USD
 
 # Tickers EUR (Xetra) — seront convertis EUR→USD avant calcul
@@ -144,7 +148,7 @@ eur_tickers:
   - EXV6.DE
   - EXV5.DE
   - EXV3.DE
-  # EUAD exclu : coté en USD sur CBOE Europe (à vérifier et ajuster si besoin)
+  # EUAD exclu : coté en USD sur CBOE Europe
 
 # Benchmark et taux de change
 benchmark: SPY
