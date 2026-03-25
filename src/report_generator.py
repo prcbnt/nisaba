@@ -19,6 +19,16 @@ _CONFIRM_BASE_URL = "https://prcbnt.github.io/nisaba/confirm.html"
 # Helpers de formatage
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _ht(ticker: str) -> str:
+    """Échappe le point des tickers (ex. EXV6.DE → EXV6&#46;DE).
+
+    Les clients email (Gmail…) auto-détectent 'XYZ.DE' comme un nom de
+    domaine et créent un lien hypertexte indésirable. Remplacer '.' par
+    l'entité HTML &#46; produit un rendu identique sans déclencher la détection.
+    """
+    return ticker.replace('.', '&#46;')
+
+
 def _pct(value, decimals: int = 1) -> str:
     try:
         if value is None or (isinstance(value, float) and np.isnan(value)):
@@ -292,7 +302,7 @@ def generate_weekly_report(
 
             rows += f"""
             <tr>
-              <td{row_style}><strong>{ticker}</strong></td>
+              <td{row_style}><strong>{_ht(ticker)}</strong></td>
               <td{row_style} style="font-size:11px;{'color:#999;' if not in_target else ''}">{name}</td>
               <td class="num"{row_style}>{"50%" if in_target else "—"}</td>
               <td class="num" style="{_weight(ret_1m) if in_target else 'color:#999;'}">{_pct(ret_1m)}</td>
@@ -365,7 +375,7 @@ def generate_weekly_report(
         ranking_rows += f"""
         <tr{style}>
           <td class="num" style="color:#999;font-size:11px;">{rank_str}</td>
-          <td><strong>{row['ticker']}</strong></td>
+          <td><strong>{_ht(row['ticker'])}</strong></td>
           <td style="color:#555;font-size:11px;">{row['name']}</td>
           <td>{row['sector']}</td>
           <td style="color:#999;">{row['region']}</td>
@@ -463,7 +473,7 @@ def generate_monthly_report(
         top2_html += f"""
         <div class="top-block">
           <div class="top-rank">Top {i} &mdash; 50%</div>
-          <div class="top-ticker">{etf['ticker']}{badge}</div>
+          <div class="top-ticker">{_ht(etf['ticker'])}{badge}</div>
           <div class="top-name">{etf['name']}</div>
           <div class="top-metrics">
             <div>
@@ -499,7 +509,7 @@ def generate_monthly_report(
         ranking_rows += f"""
         <tr{style}>
           <td class="num" style="color:#999;font-size:11px;">{rank_str}</td>
-          <td><strong>{row['ticker']}</strong></td>
+          <td><strong>{_ht(row['ticker'])}</strong></td>
           <td style="color:#555;font-size:11px;">{row['name']}</td>
           <td>{row['sector']}</td>
           <td style="color:#999;">{row['region']}</td>
