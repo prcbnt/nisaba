@@ -1,0 +1,151 @@
+# Univers des 21 ETFs — 3 zones × 7 secteurs
+# Cotation : US et EM en USD, Europe en EUR (Xetra)
+
+universe:
+  # ── Technologie ──────────────────────────────────────────────────────────
+  - ticker: XLK
+    name: "Technology Select Sector SPDR"
+    sector: Technologie
+    region: US
+    currency: USD
+
+  - ticker: EXV1.DE
+    name: "iShares STOXX Europe 600 Technology"
+    sector: Technologie
+    region: Europe
+    currency: EUR
+
+  - ticker: KWEB
+    name: "KraneShares CSI China Internet"
+    sector: Technologie
+    region: EM
+    currency: USD
+
+  # ── Santé ─────────────────────────────────────────────────────────────────
+  - ticker: XLV
+    name: "Health Care Select Sector SPDR"
+    sector: Santé
+    region: US
+    currency: USD
+
+  - ticker: EXV4.DE
+    name: "iShares STOXX Europe 600 Health Care"
+    sector: Santé
+    region: Europe
+    currency: EUR
+
+  - ticker: EMHC
+    name: "iShares MSCI EM Health Care"
+    sector: Santé
+    region: EM
+    currency: USD
+
+  # ── Finance ───────────────────────────────────────────────────────────────
+  - ticker: XLF
+    name: "Financial Select Sector SPDR"
+    sector: Finance
+    region: US
+    currency: USD
+
+  - ticker: EXV7.DE
+    name: "iShares STOXX Europe 600 Banks"
+    sector: Finance
+    region: Europe
+    currency: EUR
+
+  - ticker: FEMS
+    name: "First Trust EM Small Cap AlphaDEX"
+    sector: Finance
+    region: EM
+    currency: USD
+
+  # ── Industrie ─────────────────────────────────────────────────────────────
+  - ticker: XLI
+    name: "Industrial Select Sector SPDR"
+    sector: Industrie
+    region: US
+    currency: USD
+
+  - ticker: EXV6.DE
+    name: "iShares STOXX Europe 600 Industrial G&S"
+    sector: Industrie
+    region: Europe
+    currency: EUR
+
+  - ticker: XSOE
+    name: "WisdomTree EM ex-State Owned Enterprises"
+    sector: Industrie
+    region: EM
+    currency: USD
+
+  # ── Biens de consommation ─────────────────────────────────────────────────
+  - ticker: XLP
+    name: "Consumer Staples Select Sector SPDR"
+    sector: Consommation
+    region: US
+    currency: USD
+
+  - ticker: EXV5.DE
+    name: "iShares STOXX Europe 600 Personal & H Care"
+    sector: Consommation
+    region: Europe
+    currency: EUR
+
+  - ticker: EMQQ
+    name: "EM Internet & Ecommerce ETF"
+    sector: Consommation
+    region: EM
+    currency: USD
+
+  # ── Énergie ───────────────────────────────────────────────────────────────
+  - ticker: XLE
+    name: "Energy Select Sector SPDR"
+    sector: Énergie
+    region: US
+    currency: USD
+
+  - ticker: EXV3.DE
+    name: "iShares STOXX Europe 600 Oil & Gas"
+    sector: Énergie
+    region: Europe
+    currency: EUR
+
+  - ticker: IXC
+    name: "iShares Global Energy ETF"
+    sector: Énergie
+    region: EM
+    currency: USD
+
+  # ── Défense ───────────────────────────────────────────────────────────────
+  - ticker: ITA
+    name: "iShares U.S. Aerospace & Defense ETF"
+    sector: Défense
+    region: US
+    currency: USD
+
+  - ticker: EUAD
+    name: "iShares MSCI Europe Aerospace & Defense"
+    sector: Défense
+    region: Europe
+    # Note: EUAD est sur CBOE Europe, coté en USD. Ajuster si cotation EUR.
+    currency: USD
+
+  - ticker: EMXC
+    name: "iShares MSCI EM ex-China ETF"
+    sector: Défense
+    region: EM
+    currency: USD
+
+# Tickers EUR (Xetra) — seront convertis EUR→USD avant calcul
+eur_tickers:
+  - EXV1.DE
+  - EXV4.DE
+  - EXV7.DE
+  - EXV6.DE
+  - EXV5.DE
+  - EXV3.DE
+  # EUAD exclu : coté en USD sur CBOE Europe (à vérifier et ajuster si besoin)
+
+# Benchmark et taux de change
+benchmark: SPY
+fx_ticker: "EURUSD=X"

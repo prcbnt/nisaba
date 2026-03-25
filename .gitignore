@@ -1,0 +1,22 @@
+# Secrets — ne jamais commiter
+credentials.json
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Données générées
+data/backtest_results.csv
+
+# Éditeurs
+.DS_Store
+.idea/
+.vscode/
+*.swp

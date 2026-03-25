@@ -1,0 +1,81 @@
+name: Nisabā — Monday Run
+
+on:
+  schedule:
+    # Chaque lundi à 07h30 UTC (08h30 Paris hiver, 09h30 été)
+    - cron: '30 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      force_monthly:
+        description: 'Forcer le rapport mensuel (oui/non)'
+        required: false
+        default: 'non'
+
+jobs:
+  run-momentum:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout avec token pour pouvoir commiter ──────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Python ─────────────────────────────────────────────────────────
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── 3. Déterminer le type de run ──────────────────────────────────────
+      - name: Detect run type
+        id: run-type
+        run: |
+          python -c "
+          from datetime import date
+          today = date.today()
+          # Premier lundi du mois : jour entre 1 et 7 inclus
+          is_first_monday = 1 <= today.day <= 7
+          print(f'is_first_monday={str(is_first_monday).lower()}')
+          " >> $GITHUB_OUTPUT
+
+      # ── 4a. Rapport mensuel (premier lundi du mois) ───────────────────────
+      - name: Run monthly report
+        if: |
+          steps.run-type.outputs.is_first_monday == 'true' ||
+          github.event.inputs.force_monthly == 'oui'
+        env:
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: python scripts/run_monthly.py
+
+      # ── 4b. Rapport hebdomadaire (autres lundis) ──────────────────────────
+      - name: Run weekly report
+        if: |
+          steps.run-type.outputs.is_first_monday == 'false' &&
+          github.event.inputs.force_monthly != 'oui'
+        env:
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: python scripts/run_weekly.py
+
+      # ── 5. Commit du portfolio_state.json mis à jour ──────────────────────
+      - name: Commit portfolio state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/portfolio_state.json
+          # Ne commite que si le fichier a changé
+          git diff --staged --quiet || git commit -m "chore: update portfolio state $(date -u +%Y-%m-%d)"
+          git push

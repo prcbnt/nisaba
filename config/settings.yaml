@@ -1,0 +1,25 @@
+# Paramètres de la stratégie Nisabā
+
+momentum:
+  weight_1m: 0.5          # Poids rendement 1 mois dans le score composite
+  weight_3m: 0.5          # Poids rendement 3 mois dans le score composite
+  ma_filter_days: 200     # Filtre absolu : cours > MM sur N jours de bourse
+  trading_days_1m: 21     # ~1 mois en jours de bourse
+  trading_days_3m: 63     # ~3 mois en jours de bourse
+
+allocation:
+  top_n: 2                # Nombre d'ETFs en portefeuille
+  weights: [0.5, 0.5]     # Poids pour Top 1 et Top 2
+
+email:
+  recipient: "pebeneteau@gmail.com"
+  # Les credentials sont dans les variables d'environnement :
+  # GMAIL_SENDER        → adresse Gmail expéditrice
+  # GMAIL_APP_PASSWORD  → App Password Gmail (pas le mot de passe principal)
+  # EMAIL_RECIPIENT     → override optionnel de l'adresse destinataire
+
+data:
+  fetch_period_days: 260  # Historique à télécharger (>200j pour MM200)
+
+backtest:
+  default_start: "2020-01-01"   # Date de début par défaut du backtest
