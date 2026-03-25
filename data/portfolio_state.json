@@ -1,5 +1,41 @@
 {
-  "current_allocation": [],
-  "last_rebalance_date": null,
-  "history": []
+  "current_allocation": [
+    {
+      "ticker": "XLE",
+      "name": "Energy Select Sector SPDR",
+      "weight": 0.5,
+      "score_at_entry": 0.242935,
+      "entry_date": "2026-03-25"
+    },
+    {
+      "ticker": "IXC",
+      "name": "iShares Global Energy ETF",
+      "weight": 0.5,
+      "score_at_entry": 0.242752,
+      "entry_date": "2026-03-25"
+    }
+  ],
+  "last_rebalance_date": "2026-03-25",
+  "history": [
+    {
+      "date": "2026-03-25",
+      "from": [],
+      "to": [
+        {
+          "ticker": "XLE",
+          "name": "Energy Select Sector SPDR",
+          "weight": 0.5,
+          "score_at_entry": 0.242935,
+          "entry_date": "2026-03-25"
+        },
+        {
+          "ticker": "IXC",
+          "name": "iShares Global Energy ETF",
+          "weight": 0.5,
+          "score_at_entry": 0.242752,
+          "entry_date": "2026-03-25"
+        }
+      ]
+    }
+  ]
 }
