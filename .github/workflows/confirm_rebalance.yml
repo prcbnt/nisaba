@@ -1,0 +1,55 @@
+name: Nisabā — Confirm Rebalance
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Tapez "oui" pour confirmer le rebalancement'
+        required: true
+        default: 'oui'
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  confirm-rebalance:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ───────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Python ─────────────────────────────────────────────────────────────
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── 3. Confirmer le rebalancement ─────────────────────────────────────────
+      - name: Confirm rebalance
+        env:
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: python scripts/confirm_rebalance.py
+
+      # ── 4. Commit portfolio_state.json ────────────────────────────────────────
+      - name: Commit portfolio state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/portfolio_state.json
+          git diff --staged --quiet || git commit -m "chore: confirm rebalance $(date -u +%Y-%m-%d)"
+          git push

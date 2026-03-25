@@ -11,6 +11,12 @@ on:
         required: false
         default: 'non'
 
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   run-momentum:
     runs-on: ubuntu-latest
@@ -55,6 +61,7 @@ jobs:
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          CONFIRM_PAT: ${{ secrets.CONFIRM_PAT }}
         run: python scripts/run_monthly.py
 
       # ── 4b. Rapport hebdomadaire (autres lundis) ──────────────────────────
@@ -68,6 +75,7 @@ jobs:
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          CONFIRM_PAT: ${{ secrets.CONFIRM_PAT }}
         run: python scripts/run_weekly.py
 
       # ── 5. Commit du portfolio_state.json mis à jour ──────────────────────
