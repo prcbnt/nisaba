@@ -286,7 +286,7 @@ def generate_weekly_report(
             in_target  = ticker in target_tickers
 
             row_data = ranked[ranked["ticker"] == ticker]
-            ret_1m = float(row_data["ret_1m"].iloc[0]) if not row_data.empty else None
+            ret_3m = float(row_data["ret_3m"].iloc[0]) if not row_data.empty else None
             score  = float(row_data["score"].iloc[0])  if not row_data.empty else None
             name   = row_data["name"].iloc[0]           if not row_data.empty else ticker
 
@@ -305,7 +305,7 @@ def generate_weekly_report(
               <td{row_style}><strong>{_ht(ticker)}</strong></td>
               <td{row_style} style="font-size:11px;{'color:#999;' if not in_target else ''}">{name}</td>
               <td class="num"{row_style}>{"50%" if in_target else "—"}</td>
-              <td class="num" style="{_weight(ret_1m) if in_target else 'color:#999;'}">{_pct(ret_1m)}</td>
+              <td class="num" style="{_weight(ret_3m) if in_target else 'color:#999;'}">{_pct(ret_3m)}</td>
               <td class="num" style="{_weight(score) if in_target else 'color:#999;'}">{_pct(score)}</td>
               <td style="font-size:11px;">{action}</td>
             </tr>"""
@@ -356,7 +356,7 @@ def generate_weekly_report(
             <thead><tr>
               <th>Ticker</th><th>Nom</th>
               <th class="num">Poids cible</th>
-              <th class="num">Perf M1</th>
+              <th class="num">Perf M3</th>
               <th class="num">Score</th>
               <th>Action</th>
             </tr></thead>
@@ -379,8 +379,8 @@ def generate_weekly_report(
           <td style="color:#555;font-size:11px;">{row['name']}</td>
           <td>{row['sector']}</td>
           <td style="color:#999;">{row['region']}</td>
-          <td class="num" style="{_weight(row['ret_1m'])}">{_pct(row['ret_1m'])}</td>
           <td class="num" style="{_weight(row['ret_3m'])}">{_pct(row['ret_3m'])}</td>
+          <td class="num" style="{_weight(row['ret_6m'])}">{_pct(row['ret_6m'])}</td>
           <td class="num" style="{_weight(row['score'])}font-size:13px;">{_pct(row['score'])}</td>
           <td style="font-size:10px;color:#999;">{status_cell}</td>
         </tr>"""
@@ -407,8 +407,8 @@ def generate_weekly_report(
       <thead><tr>
         <th class="num">#</th>
         <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
-        <th class="num">M1</th>
-        <th class="num">M3</th>
+        <th class="num">M3-skip</th>
+        <th class="num">M6-skip</th>
         <th class="num">Score</th>
         <th>Statut</th>
       </tr></thead>
@@ -417,7 +417,7 @@ def generate_weekly_report(
   </div>
 
   <div class="footer">
-    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M1 + 50% M3 &mdash; Filtre MM200j
+    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M3-skip + 50% M6-skip &mdash; Filtre MM200j
   </div>
 </body>
 </html>"""
@@ -481,12 +481,12 @@ def generate_monthly_report(
               <strong>{_pct(etf['score'])}</strong>
             </div>
             <div>
-              <span class="top-metric-label">M1</span>
-              {_pct(etf['ret_1m'])}
+              <span class="top-metric-label">M3-skip</span>
+              {_pct(etf['ret_3m'])}
             </div>
             <div>
-              <span class="top-metric-label">M3</span>
-              {_pct(etf['ret_3m'])}
+              <span class="top-metric-label">M6-skip</span>
+              {_pct(etf['ret_6m'])}
             </div>
           </div>
         </div>"""
@@ -513,8 +513,8 @@ def generate_monthly_report(
           <td style="color:#555;font-size:11px;">{row['name']}</td>
           <td>{row['sector']}</td>
           <td style="color:#999;">{row['region']}</td>
-          <td class="num" style="{_weight(row['ret_1m'])}">{_pct(row['ret_1m'])}</td>
           <td class="num" style="{_weight(row['ret_3m'])}">{_pct(row['ret_3m'])}</td>
+          <td class="num" style="{_weight(row['ret_6m'])}">{_pct(row['ret_6m'])}</td>
           <td class="num" style="{_weight(row['score'])}font-size:13px;">{_pct(row['score'])}</td>
           <td style="font-size:10px;color:#999;">{status_cell}</td>
         </tr>"""
@@ -552,8 +552,8 @@ def generate_monthly_report(
       <thead><tr>
         <th class="num">#</th>
         <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
-        <th class="num">M1</th>
-        <th class="num">M3</th>
+        <th class="num">M3-skip</th>
+        <th class="num">M6-skip</th>
         <th class="num">Score</th>
         <th>Statut</th>
       </tr></thead>
@@ -562,7 +562,7 @@ def generate_monthly_report(
   </div>
 
   <div class="footer">
-    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M1 + 50% M3 &mdash; Filtre MM200j
+    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M3-skip + 50% M6-skip &mdash; Filtre MM200j
   </div>
 </body>
 </html>"""

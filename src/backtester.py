@@ -19,8 +19,9 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_DAYS_1M = 21
-_DAYS_3M = 63
+_DAYS_3M  = 63
+_DAYS_6M  = 126
+_SKIP     = 21
 _DAYS_MA200 = 200
 _CASH_TICKER = "__CASH__"  # Pseudo-ticker quand aucun ETF éligible
 
@@ -46,8 +47,11 @@ class Backtester:
 
         self.universe: list[dict] = tickers
         self.eur_tickers: set[str] = eur_tickers or set()
-        self.weight_1m: float = settings["momentum"]["weight_1m"]
         self.weight_3m: float = settings["momentum"]["weight_3m"]
+        self.weight_6m: float = settings["momentum"]["weight_6m"]
+        self.skip_days: int   = settings["momentum"].get("skip_days", _SKIP)
+        self.days_3m: int     = settings["momentum"].get("trading_days_3m", _DAYS_3M)
+        self.days_6m: int     = settings["momentum"].get("trading_days_6m", _DAYS_6M)
         self.ma_days: int = settings["momentum"]["ma_filter_days"]
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -176,16 +180,19 @@ class Backtester:
             if current <= ma200:
                 continue  # Filtre absolu
 
-            if len(series) < _DAYS_1M + 1 or len(series) < _DAYS_3M + 1:
+            # Données suffisantes pour 6M-skip (contrainte la plus longue hors MM200)
+            if len(series) < self.days_6m + self.skip_days + 1:
                 continue
 
-            ret_1m = float(series.iloc[-1] / series.iloc[-_DAYS_1M - 1] - 1)
-            ret_3m = float(series.iloc[-1] / series.iloc[-_DAYS_3M - 1] - 1)
-            score = self.weight_1m * ret_1m + self.weight_3m * ret_3m
+            # Rendements avec skip (endpoint = J-skip_days, pas J-0)
+            skip = self.skip_days
+            ret_3m = float(series.iloc[-(skip + 1)] / series.iloc[-(self.days_3m + skip + 1)] - 1)
+            ret_6m = float(series.iloc[-(skip + 1)] / series.iloc[-(self.days_6m + skip + 1)] - 1)
+            score = self.weight_3m * ret_3m + self.weight_6m * ret_6m
 
-            eligible.append({"ticker": ticker, "score": score, "ret_1m": ret_1m})
+            eligible.append({"ticker": ticker, "score": score, "ret_3m": ret_3m})
 
-        eligible.sort(key=lambda x: (x["score"], x["ret_1m"]), reverse=True)
+        eligible.sort(key=lambda x: (x["score"], x["ret_3m"]), reverse=True)
         top2 = eligible[:2]
         return [{"ticker": e["ticker"], "weight": 0.5} for e in top2]
 

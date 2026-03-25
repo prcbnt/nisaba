@@ -1,9 +1,15 @@
 """
 momentum_scorer.py — Calcul des scores de momentum et application du filtre absolu.
 
-Formule : score = weight_1m × rendement_1M + weight_3m × rendement_3M
+Formule : score = weight_3m × ret_3M_skip + weight_6m × ret_6M_skip
+  - ret_3M_skip : rendement de J-63 à J-21 (63 jours, endpoint = il y a 1 mois)
+  - ret_6M_skip : rendement de J-126 à J-21 (126 jours, endpoint = il y a 1 mois)
+
+Le "skip" (skip_days = 21) exclut le mois le plus récent pour éviter l'effet
+de reversal court terme documenté par Jegadeesh & Titman.
+
 Filtre   : cours > MM200j  (standard Antonacci)
-Tie-break : rendement_1M si égalité de score
+Tie-break : ret_3m si égalité de score
 """
 
 import logging
@@ -15,9 +21,10 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-# Nombre de jours de bourse par fenêtre temporelle
-_DAYS_1M = 21
-_DAYS_3M = 63
+# Constantes par défaut (surchargées par settings.yaml)
+_DAYS_3M  = 63
+_DAYS_6M  = 126
+_SKIP     = 21
 
 
 class MomentumScorer:
@@ -29,9 +36,12 @@ class MomentumScorer:
             settings = yaml.safe_load(f)
 
         self.universe: list[dict] = ticker_cfg["universe"]
-        self.weight_1m: float = settings["momentum"]["weight_1m"]
         self.weight_3m: float = settings["momentum"]["weight_3m"]
-        self.ma_days: int = settings["momentum"]["ma_filter_days"]
+        self.weight_6m: float = settings["momentum"]["weight_6m"]
+        self.skip_days: int   = settings["momentum"].get("skip_days", _SKIP)
+        self.days_3m: int     = settings["momentum"].get("trading_days_3m", _DAYS_3M)
+        self.days_6m: int     = settings["momentum"].get("trading_days_6m", _DAYS_6M)
+        self.ma_days: int     = settings["momentum"]["ma_filter_days"]
 
     # ──────────────────────────────────────────────────────────────────────────
     # API publique
@@ -42,7 +52,7 @@ class MomentumScorer:
         Calcule les scores momentum pour tous les ETFs de l'univers.
 
         Retourne un DataFrame trié : éligibles (score desc) puis exclus.
-        Colonnes : ticker, name, sector, region, ret_1m, ret_3m, score,
+        Colonnes : ticker, name, sector, region, ret_3m, ret_6m, score,
                    current_price, ma200, above_ma200, status, rank
         """
         rows = []
@@ -76,7 +86,7 @@ class MomentumScorer:
 
         series = prices[ticker].dropna()
 
-        # Historique insuffisant pour MM200
+        # Historique minimum pour MM200 (contrainte la plus exigeante)
         if len(series) < self.ma_days + 1:
             logger.warning(
                 f"{ticker} : historique trop court ({len(series)} j < {self.ma_days + 1})"
@@ -86,17 +96,19 @@ class MomentumScorer:
 
         current = float(series.iloc[-1])
 
-        # Rendements
-        ret_1m = self._return(series, _DAYS_1M)
-        ret_3m = self._return(series, _DAYS_3M)
+        # Rendements avec skip (endpoint = J-skip_days, pas J-0)
+        ret_3m = self._return(series, self.days_3m, self.skip_days)
+        ret_6m = self._return(series, self.days_6m, self.skip_days)
 
         # Filtre absolu MM200
         ma200 = float(series.tail(self.ma_days).mean())
         above_ma200 = current > ma200
 
         # Score composite
-        if pd.notna(ret_1m) and pd.notna(ret_3m):
-            score = self.weight_1m * ret_1m + self.weight_3m * ret_3m
+        if pd.notna(ret_3m) and pd.notna(ret_6m):
+            score = self.weight_3m * ret_3m + self.weight_6m * ret_6m
+        elif pd.notna(ret_3m):
+            score = ret_3m  # fallback si historique insuffisant pour 6M
         else:
             score = np.nan
 
@@ -107,21 +119,30 @@ class MomentumScorer:
         else:
             status = "✓"
 
-        return self._make_row(etf, series, ret_1m, ret_3m, score, above_ma200, status, ma200, current)
+        return self._make_row(etf, series, ret_3m, ret_6m, score, above_ma200, status, ma200, current)
 
     @staticmethod
-    def _return(series: pd.Series, trading_days: int) -> float | None:
-        """Rendement simple sur N jours de bourse."""
-        if len(series) < trading_days + 1:
+    def _return(series: pd.Series, lookback_days: int, skip_days: int = 0) -> float:
+        """
+        Rendement sur lookback_days jours de bourse, endpoint à J-skip_days.
+
+        Exemple : _return(series, 63, 21)
+          → prix à J-21 / prix à J-84 - 1  (signal 3M-skip)
+          → series.iloc[-(skip+1)] / series.iloc[-(lookback+skip+1)] - 1
+        """
+        total_needed = lookback_days + skip_days + 1
+        if len(series) < total_needed:
             return np.nan
-        return float(series.iloc[-1] / series.iloc[-trading_days - 1] - 1)
+        end   = series.iloc[-(skip_days + 1)]
+        start = series.iloc[-(lookback_days + skip_days + 1)]
+        return float(end / start - 1)
 
     @staticmethod
     def _make_row(
         etf: dict,
         series: pd.Series,
-        ret_1m,
         ret_3m,
+        ret_6m,
         score,
         above_ma200: bool,
         status: str,
@@ -129,28 +150,28 @@ class MomentumScorer:
         current: float | None = None,
     ) -> dict:
         return {
-            "ticker": etf["ticker"],
-            "name": etf["name"],
-            "sector": etf["sector"],
-            "region": etf["region"],
+            "ticker":        etf["ticker"],
+            "name":          etf["name"],
+            "sector":        etf["sector"],
+            "region":        etf["region"],
             "current_price": current if current is not None else (float(series.iloc[-1]) if len(series) else np.nan),
-            "ma200": ma200,
-            "above_ma200": above_ma200,
-            "ret_1m": ret_1m,
-            "ret_3m": ret_3m,
-            "score": score,
-            "status": status,
+            "ma200":         ma200,
+            "above_ma200":   above_ma200,
+            "ret_3m":        ret_3m,
+            "ret_6m":        ret_6m,
+            "score":         score,
+            "status":        status,
         }
 
     @staticmethod
     def _rank(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Trie : éligibles par score desc (tie-break ret_1m), puis exclus par score desc.
+        Trie : éligibles par score desc (tie-break ret_3m), puis exclus par score desc.
         Assigne un rang uniquement aux éligibles.
         """
         eligible = (
             df[df["status"] == "✓"]
-            .sort_values(by=["score", "ret_1m"], ascending=False)
+            .sort_values(by=["score", "ret_3m"], ascending=False)
             .reset_index(drop=True)
         )
         excluded = (

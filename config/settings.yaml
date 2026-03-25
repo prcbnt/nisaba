@@ -1,11 +1,14 @@
 # Paramètres de la stratégie Nisabā
 
 momentum:
-  weight_1m: 0.5          # Poids rendement 1 mois dans le score composite
-  weight_3m: 0.5          # Poids rendement 3 mois dans le score composite
+  # Signal : rendement 3M-skip + 6M-skip (évite le reversal du dernier mois)
+  # Les deux fenêtres démarrent à J-21 (skip_days) pour exclure le mois le plus récent.
+  weight_3m: 0.5          # Poids signal 3M-skip dans le score composite
+  weight_6m: 0.5          # Poids signal 6M-skip dans le score composite
+  skip_days: 21           # Jours à sauter (évite l'effet reversal 1M)
+  trading_days_3m: 63     # Fenêtre 3M en jours de bourse
+  trading_days_6m: 126    # Fenêtre 6M en jours de bourse
   ma_filter_days: 200     # Filtre absolu : cours > MM sur N jours de bourse
-  trading_days_1m: 21     # ~1 mois en jours de bourse
-  trading_days_3m: 63     # ~3 mois en jours de bourse
 
 allocation:
   top_n: 2                # Nombre d'ETFs en portefeuille
