@@ -3,6 +3,13 @@ report_generator.py — Génération des emails HTML (hebdomadaire et mensuel).
 
 Design : Swiss / International Typographic Style.
          Helvetica, noir et blanc, grille stricte, typographie forte.
+
+Structure email :
+  Masthead
+  ├─ Stratégie Macro (signal + allocation + classement 21 ETFs)
+  └─ Stratégie Thématique (signal + allocation + classement 10 ETFs)
+  CTA button unique (si rebalancement à faire dans l'une ou l'autre stratégie)
+  Footer
 """
 
 from datetime import date
@@ -106,6 +113,17 @@ _BASE_CSS = """
     margin-top: 4px;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+  }
+  .strategy-header {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #000;
+    border-top: 2px solid #000;
+    padding-top: 12px;
+    margin-top: 44px;
+    margin-bottom: 20px;
   }
   .section {
     margin-bottom: 36px;
@@ -214,7 +232,7 @@ _BASE_CSS = """
     vertical-align: middle;
   }
   .badge-inv { background: #000; color: #fff; border-color: #000; }
-  .cta-wrap { margin: 20px 0 12px 0; }
+  .cta-wrap { margin: 28px 0 12px 0; }
   .cta-btn {
     display: inline-block;
     background: #000;
@@ -248,56 +266,92 @@ _BASE_CSS = """
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Rapport hebdomadaire
+# Blocs de rendu par stratégie (privés)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def generate_weekly_report(
+def _weekly_strategy_block(
     ranked: pd.DataFrame,
     top_n: list[dict],
-    current_allocation: list[dict],
-    spy_ret_1m: float | None,
-    run_date: date | None = None,
-    confirm_url: str | None = None,
-) -> str:
-    run_date = run_date or date.today()
+    current: list[dict],
+    alloc_col_label: str,
+    alloc_col_key: str,
+    rank_col1_label: str,
+    rank_col1_key: str,
+    rank_col2_label: str,
+    rank_col2_key: str,
+    ma_label: str,
+    extra_rows: str = "",
+) -> tuple[str, bool]:
+    """
+    Génère le contenu hebdomadaire d'une stratégie (sans l'en-tête stratégie).
+    Retourne (html, needs_action) où needs_action = True si un rebalancement
+    ou une initialisation est nécessaire.
+    """
+    current_tickers = {h["ticker"] for h in current}
+    target_tickers  = {e["ticker"] for e in top_n[:2]}
+    needs_rb     = (current_tickers != target_tickers) if top_n else False
+    needs_action = needs_rb or (not current and bool(top_n))
 
-    # ── Portfolio Allocation : comparaison actuel vs cible ────────────────────
+    # ── Signal ────────────────────────────────────────────────────────────────
     if not top_n:
-        perf_section = """
+        signal_html = f"""
         <div class="signal">
           <div class="signal-title">Aucun ETF éligible</div>
-          <div class="signal-body">Tous les ETFs sont sous leur MM200j. Rester en cash.</div>
+          <div class="signal-body">Tous les ETFs sont sous leur {ma_label}. Rester en cash.</div>
+        </div>"""
+    elif not current:
+        signal_html = """
+        <div class="signal invert">
+          <div class="signal-title">Initialisation</div>
+          <div class="signal-body">Aucune allocation actuelle — investir 50% Top 1 / 50% Top 2.</div>
+        </div>"""
+    elif needs_rb:
+        added   = sorted(target_tickers - current_tickers)
+        removed = sorted(current_tickers - target_tickers)
+        parts   = []
+        if added:   parts.append(f"Acheter {', '.join(added)}")
+        if removed: parts.append(f"Vendre {', '.join(removed)}")
+        signal_html = f"""
+        <div class="signal invert">
+          <div class="signal-title">Rebalancement suggéré</div>
+          <div class="signal-body">{' &nbsp;·&nbsp; '.join(parts)}</div>
         </div>"""
     else:
-        current_tickers = {h["ticker"] for h in current_allocation}
-        target_tickers  = {e["ticker"] for e in top_n[:2]}
-        needs_rebalance = current_tickers != target_tickers
+        signal_html = """
+        <div class="signal">
+          <div class="signal-title">Allocation conforme</div>
+          <div class="signal-body">Aucun changement nécessaire.</div>
+        </div>"""
 
-        target_by_ticker = {e["ticker"]: e for e in top_n[:2]}
-
-        # Union actuel + cible, cible en premier
+    # ── Allocation table ───────────────────────────────────────────────────────
+    if not top_n:
+        alloc_section = signal_html
+    else:
         all_tickers_ordered = list(target_tickers) + [
             t for t in current_tickers if t not in target_tickers
         ]
-
         rows = ""
         for ticker in all_tickers_ordered:
             in_current = ticker in current_tickers
             in_target  = ticker in target_tickers
 
             row_data = ranked[ranked["ticker"] == ticker]
-            ret_3m = float(row_data["ret_3m"].iloc[0]) if not row_data.empty else None
-            score  = float(row_data["score"].iloc[0])  if not row_data.empty else None
-            name   = row_data["name"].iloc[0]           if not row_data.empty else ticker
+            col1_val = (
+                float(row_data[alloc_col_key].iloc[0])
+                if not row_data.empty and alloc_col_key in row_data.columns
+                else None
+            )
+            score = float(row_data["score"].iloc[0]) if not row_data.empty else None
+            name  = row_data["name"].iloc[0]          if not row_data.empty else ticker
 
             if in_current and in_target:
-                action = '<span style="font-weight:700;">Conserver</span>'
+                action    = '<span style="font-weight:700;">Conserver</span>'
                 row_style = ""
-            elif in_target and not in_current:
-                action = '<span style="font-weight:700;">Acheter</span>'
+            elif in_target:
+                action    = '<span style="font-weight:700;">Acheter</span>'
                 row_style = ""
             else:
-                action = '<span style="color:#999;">Vendre</span>'
+                action    = '<span style="color:#999;">Vendre</span>'
                 row_style = ' style="color:#999;"'
 
             rows += f"""
@@ -305,50 +359,14 @@ def generate_weekly_report(
               <td{row_style}><strong>{_ht(ticker)}</strong></td>
               <td{row_style} style="font-size:11px;{'color:#999;' if not in_target else ''}">{name}</td>
               <td class="num"{row_style}>{"50%" if in_target else "—"}</td>
-              <td class="num" style="{_weight(ret_3m) if in_target else 'color:#999;'}">{_pct(ret_3m)}</td>
+              <td class="num" style="{_weight(col1_val) if in_target else 'color:#999;'}">{_pct(col1_val)}</td>
               <td class="num" style="{_weight(score) if in_target else 'color:#999;'}">{_pct(score)}</td>
               <td style="font-size:11px;">{action}</td>
             </tr>"""
 
-        # SPY benchmark
-        rows += f"""
-        <tr>
-          <td style="color:#999;"><strong>SPY</strong></td>
-          <td style="color:#999;font-size:11px;">S&amp;P 500</td>
-          <td class="num" style="color:#999;">—</td>
-          <td class="num" style="{_weight(spy_ret_1m)}color:#999;">{_pct(spy_ret_1m)}</td>
-          <td class="num" style="color:#999;">—</td>
-          <td style="color:#999;font-size:11px;">Benchmark</td>
-        </tr>"""
+        rows += extra_rows
 
-        # Signal
-        if not current_allocation:
-            signal_html = f"""
-            <div class="signal invert">
-              <div class="signal-title">Initialisation</div>
-              <div class="signal-body">Aucune allocation actuelle — investir 50% Top 1 / 50% Top 2.</div>
-            </div>
-            {_cta_button(confirm_url)}"""
-        elif needs_rebalance:
-            added   = sorted(target_tickers - current_tickers)
-            removed = sorted(current_tickers - target_tickers)
-            parts   = []
-            if added:   parts.append(f"Acheter {', '.join(added)}")
-            if removed: parts.append(f"Vendre {', '.join(removed)}")
-            signal_html = f"""
-            <div class="signal invert">
-              <div class="signal-title">Rebalancement suggéré</div>
-              <div class="signal-body">{' &nbsp;·&nbsp; '.join(parts)}</div>
-            </div>
-            {_cta_button(confirm_url)}"""
-        else:
-            signal_html = """
-            <div class="signal">
-              <div class="signal-title">Allocation conforme</div>
-              <div class="signal-body">Aucun changement nécessaire.</div>
-            </div>"""
-
-        perf_section = f"""
+        alloc_section = f"""
         <div class="section">
           <div class="section-label">Portfolio Allocation</div>
           {signal_html}
@@ -356,7 +374,7 @@ def generate_weekly_report(
             <thead><tr>
               <th>Ticker</th><th>Nom</th>
               <th class="num">Poids cible</th>
-              <th class="num">Perf M3</th>
+              <th class="num">{alloc_col_label}</th>
               <th class="num">Score</th>
               <th>Action</th>
             </tr></thead>
@@ -364,13 +382,18 @@ def generate_weekly_report(
           </table>
         </div>"""
 
-    # ── Classement ────────────────────────────────────────────────────────────
+    # ── Ranking table ─────────────────────────────────────────────────────────
     ranking_rows = ""
     for _, row in ranked.iterrows():
-        eligible = row["status"] == "✓"
-        rank_str = f"{int(row['rank'])}" if pd.notna(row.get("rank")) else "—"
-        style = ' class="exclu"' if not eligible else ""
-        status_cell = "" if eligible else f'<span style="font-size:10px;color:#999;">{row["status"]}</span>'
+        eligible    = row["status"] == "✓"
+        rank_str    = f"{int(row['rank'])}" if pd.notna(row.get("rank")) else "—"
+        style       = ' class="exclu"' if not eligible else ""
+        status_cell = (
+            "" if eligible
+            else f'<span style="font-size:10px;color:#999;">{row["status"]}</span>'
+        )
+        col1_v = row.get(rank_col1_key, np.nan)
+        col2_v = row.get(rank_col2_key, np.nan)
 
         ranking_rows += f"""
         <tr{style}>
@@ -379,11 +402,230 @@ def generate_weekly_report(
           <td style="color:#555;font-size:11px;">{row['name']}</td>
           <td>{row['sector']}</td>
           <td style="color:#999;">{row['region']}</td>
-          <td class="num" style="{_weight(row['ret_3m'])}">{_pct(row['ret_3m'])}</td>
-          <td class="num" style="{_weight(row['ret_6m'])}">{_pct(row['ret_6m'])}</td>
+          <td class="num" style="{_weight(col1_v)}">{_pct(col1_v)}</td>
+          <td class="num" style="{_weight(col2_v)}">{_pct(col2_v)}</td>
           <td class="num" style="{_weight(row['score'])}font-size:13px;">{_pct(row['score'])}</td>
           <td style="font-size:10px;color:#999;">{status_cell}</td>
         </tr>"""
+
+    html = f"""
+    {alloc_section}
+    <div class="section">
+      <div class="section-label">Classement Momentum</div>
+      <table>
+        <thead><tr>
+          <th class="num">#</th>
+          <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
+          <th class="num">{rank_col1_label}</th>
+          <th class="num">{rank_col2_label}</th>
+          <th class="num">Score</th>
+          <th>Statut</th>
+        </tr></thead>
+        <tbody>{ranking_rows}</tbody>
+      </table>
+    </div>"""
+
+    return html, needs_action
+
+
+def _monthly_strategy_block(
+    ranked: pd.DataFrame,
+    top_n: list[dict],
+    current: list[dict],
+    top2_m1_label: str,
+    top2_m1_key: str,
+    top2_m2_label: str,
+    top2_m2_key: str,
+    rank_col1_label: str,
+    rank_col1_key: str,
+    rank_col2_label: str,
+    rank_col2_key: str,
+    ma_label: str,
+) -> tuple[str, bool]:
+    """
+    Génère le contenu mensuel d'une stratégie (sans l'en-tête stratégie).
+    Retourne (html, needs_action).
+    """
+    current_tickers = {h["ticker"] for h in current}
+    new_tickers     = {e["ticker"] for e in top_n[:2]}
+    needs_rb        = current_tickers != new_tickers
+    needs_action    = needs_rb or (not current and bool(top_n))
+
+    # ── Signal ────────────────────────────────────────────────────────────────
+    if not top_n:
+        signal_html = f"""
+        <div class="signal">
+          <div class="signal-title">Aucun ETF éligible</div>
+          <div class="signal-body">Tous les ETFs sont sous leur {ma_label}. Rester en cash.</div>
+        </div>"""
+    elif not current:
+        signal_html = """
+        <div class="signal invert" style="margin-bottom:8px;">
+          <div class="signal-title">Initialisation</div>
+          <div class="signal-body">Aucune allocation actuelle. Investir 50% Top 1 / 50% Top 2.</div>
+        </div>"""
+    elif needs_rb:
+        added   = new_tickers - current_tickers
+        removed = current_tickers - new_tickers
+        lines   = []
+        if added:   lines.append(f"Acheter : <strong>{', '.join(sorted(added))}</strong>")
+        if removed: lines.append(f"Vendre : <strong>{', '.join(sorted(removed))}</strong>")
+        signal_html = f"""
+        <div class="signal invert" style="margin-bottom:8px;">
+          <div class="signal-title">Rebalancer</div>
+          <div class="signal-body">{'&nbsp;&nbsp;·&nbsp;&nbsp;'.join(lines)}</div>
+        </div>"""
+    else:
+        signal_html = """
+        <div class="signal">
+          <div class="signal-title">Conserver</div>
+          <div class="signal-body">Aucun changement — le Top 2 est identique au mois précédent.</div>
+        </div>"""
+
+    # ── Top 2 cards ───────────────────────────────────────────────────────────
+    top2_html = ""
+    for i, etf in enumerate(top_n[:2], 1):
+        is_new = etf["ticker"] not in current_tickers
+        badge  = (
+            '<span class="badge badge-inv">Nouveau</span>'
+            if is_new
+            else '<span class="badge">Reconduit</span>'
+        )
+        m1_val = etf.get(top2_m1_key)
+        m2_val = etf.get(top2_m2_key)
+        top2_html += f"""
+        <div class="top-block">
+          <div class="top-rank">Top {i} &mdash; 50%</div>
+          <div class="top-ticker">{_ht(etf['ticker'])}{badge}</div>
+          <div class="top-name">{etf['name']}</div>
+          <div class="top-metrics">
+            <div>
+              <span class="top-metric-label">Score</span>
+              <strong>{_pct(etf.get('score'))}</strong>
+            </div>
+            <div>
+              <span class="top-metric-label">{top2_m1_label}</span>
+              {_pct(m1_val)}
+            </div>
+            <div>
+              <span class="top-metric-label">{top2_m2_label}</span>
+              {_pct(m2_val)}
+            </div>
+          </div>
+        </div>"""
+
+    allocation_section = ""
+    if top2_html:
+        allocation_section = f"""
+        <div class="section">
+          <div class="section-label">Allocation cible</div>
+          {top2_html}
+        </div>"""
+
+    # ── Ranking table ─────────────────────────────────────────────────────────
+    ranking_rows = ""
+    for _, row in ranked.iterrows():
+        eligible    = row["status"] == "✓"
+        rank_str    = f"{int(row['rank'])}" if pd.notna(row.get("rank")) else "—"
+        style       = ' class="exclu"' if not eligible else ""
+        status_cell = (
+            "" if eligible
+            else f'<span style="font-size:10px;color:#999;">{row["status"]}</span>'
+        )
+        col1_v = row.get(rank_col1_key, np.nan)
+        col2_v = row.get(rank_col2_key, np.nan)
+
+        ranking_rows += f"""
+        <tr{style}>
+          <td class="num" style="color:#999;font-size:11px;">{rank_str}</td>
+          <td><strong>{_ht(row['ticker'])}</strong></td>
+          <td style="color:#555;font-size:11px;">{row['name']}</td>
+          <td>{row['sector']}</td>
+          <td style="color:#999;">{row['region']}</td>
+          <td class="num" style="{_weight(col1_v)}">{_pct(col1_v)}</td>
+          <td class="num" style="{_weight(col2_v)}">{_pct(col2_v)}</td>
+          <td class="num" style="{_weight(row['score'])}font-size:13px;">{_pct(row['score'])}</td>
+          <td style="font-size:10px;color:#999;">{status_cell}</td>
+        </tr>"""
+
+    html = f"""
+    {signal_html}
+    {allocation_section}
+    <div class="section">
+      <div class="section-label">Classement Momentum</div>
+      <table>
+        <thead><tr>
+          <th class="num">#</th>
+          <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
+          <th class="num">{rank_col1_label}</th>
+          <th class="num">{rank_col2_label}</th>
+          <th class="num">Score</th>
+          <th>Statut</th>
+        </tr></thead>
+        <tbody>{ranking_rows}</tbody>
+      </table>
+    </div>"""
+
+    return html, needs_action
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rapport hebdomadaire
+# ──────────────────────────────────────────────────────────────────────────────
+
+def generate_weekly_report(
+    ranked_macro: pd.DataFrame,
+    top_n_macro: list[dict],
+    current_macro: list[dict],
+    spy_ret_1m: float | None,
+    ranked_thematic: pd.DataFrame,
+    top_n_thematic: list[dict],
+    current_thematic: list[dict],
+    run_date: date | None = None,
+    confirm_url: str | None = None,
+) -> str:
+    run_date = run_date or date.today()
+
+    # Ligne SPY benchmark (uniquement dans la section macro)
+    spy_row = f"""
+    <tr>
+      <td style="color:#999;"><strong>SPY</strong></td>
+      <td style="color:#999;font-size:11px;">S&amp;P 500</td>
+      <td class="num" style="color:#999;">—</td>
+      <td class="num" style="{_weight(spy_ret_1m)}color:#999;">{_pct(spy_ret_1m)}</td>
+      <td class="num" style="color:#999;">—</td>
+      <td style="color:#999;font-size:11px;">Benchmark</td>
+    </tr>"""
+
+    macro_content, macro_action = _weekly_strategy_block(
+        ranked=ranked_macro,
+        top_n=top_n_macro,
+        current=current_macro,
+        alloc_col_label="M3-skip",
+        alloc_col_key="ret_3m",
+        rank_col1_label="M3-skip",
+        rank_col1_key="ret_3m",
+        rank_col2_label="M6-skip",
+        rank_col2_key="ret_6m",
+        ma_label="MM200j",
+        extra_rows=spy_row,
+    )
+
+    thematic_content, thematic_action = _weekly_strategy_block(
+        ranked=ranked_thematic,
+        top_n=top_n_thematic,
+        current=current_thematic,
+        alloc_col_label="M3",
+        alloc_col_key="ret_3m",
+        rank_col1_label="M1",
+        rank_col1_key="ret_1m",
+        rank_col2_label="M3",
+        rank_col2_key="ret_3m",
+        ma_label="MM150j",
+    )
+
+    any_action = macro_action or thematic_action
+    cta_html   = _cta_button(confirm_url) if any_action else ""
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -399,25 +641,18 @@ def generate_weekly_report(
     <div class="masthead-sub">Suivi hebdomadaire &mdash; {run_date.strftime('%d %B %Y')}</div>
   </div>
 
-  {perf_section}
+  <div class="strategy-header" style="margin-top:0;">Stratégie Macro &mdash; 21 ETFs</div>
+  {macro_content}
 
-  <div class="section">
-    <div class="section-label">Momentum — 21 ETFs</div>
-    <table>
-      <thead><tr>
-        <th class="num">#</th>
-        <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
-        <th class="num">M3-skip</th>
-        <th class="num">M6-skip</th>
-        <th class="num">Score</th>
-        <th>Statut</th>
-      </tr></thead>
-      <tbody>{ranking_rows}</tbody>
-    </table>
-  </div>
+  <div class="strategy-header">Stratégie Thématique &mdash; 10 ETFs</div>
+  {thematic_content}
+
+  {cta_html}
 
   <div class="footer">
-    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M3-skip + 50% M6-skip &mdash; Filtre MM200j
+    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash;
+    Macro : 50% M3-skip + 50% M6-skip · Filtre MM200j &mdash;
+    Thématique : 60% M1 + 40% M3 · Filtre MM150j
   </div>
 </body>
 </html>"""
@@ -428,96 +663,49 @@ def generate_weekly_report(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def generate_monthly_report(
-    ranked: pd.DataFrame,
-    top_n: list[dict],
-    current_allocation: list[dict],
+    ranked_macro: pd.DataFrame,
+    top_n_macro: list[dict],
+    current_macro: list[dict],
+    ranked_thematic: pd.DataFrame,
+    top_n_thematic: list[dict],
+    current_thematic: list[dict],
     run_date: date | None = None,
     confirm_url: str | None = None,
 ) -> str:
     run_date = run_date or date.today()
-    current_tickers = {h["ticker"] for h in current_allocation}
-    new_tickers = {e["ticker"] for e in top_n[:2]}
 
-    # ── Signal ────────────────────────────────────────────────────────────────
-    if not current_allocation:
-        signal_html = f"""
-        <div class="signal invert" style="margin-bottom:8px;">
-          <div class="signal-title">Initialisation</div>
-          <div class="signal-body">Aucune allocation actuelle. Investir 50% Top 1 / 50% Top 2.</div>
-        </div>
-        {_cta_button(confirm_url)}"""
-    elif current_tickers != new_tickers:
-        added = new_tickers - current_tickers
-        removed = current_tickers - new_tickers
-        lines = []
-        if added:   lines.append(f"Acheter : <strong>{', '.join(sorted(added))}</strong>")
-        if removed: lines.append(f"Vendre : <strong>{', '.join(sorted(removed))}</strong>")
-        signal_html = f"""
-        <div class="signal invert" style="margin-bottom:8px;">
-          <div class="signal-title">Rebalancer</div>
-          <div class="signal-body">{'&nbsp;&nbsp;·&nbsp;&nbsp;'.join(lines)}</div>
-        </div>
-        {_cta_button(confirm_url)}"""
-    else:
-        signal_html = """
-        <div class="signal">
-          <div class="signal-title">Conserver</div>
-          <div class="signal-body">Aucun changement — le Top 2 est identique au mois précédent.</div>
-        </div>"""
+    macro_content, macro_action = _monthly_strategy_block(
+        ranked=ranked_macro,
+        top_n=top_n_macro,
+        current=current_macro,
+        top2_m1_label="M3-skip",
+        top2_m1_key="ret_3m",
+        top2_m2_label="M6-skip",
+        top2_m2_key="ret_6m",
+        rank_col1_label="M3-skip",
+        rank_col1_key="ret_3m",
+        rank_col2_label="M6-skip",
+        rank_col2_key="ret_6m",
+        ma_label="MM200j",
+    )
 
-    # ── Top 2 ─────────────────────────────────────────────────────────────────
-    top2_html = ""
-    for i, etf in enumerate(top_n[:2], 1):
-        is_new = etf["ticker"] not in current_tickers
-        badge = '<span class="badge badge-inv">Nouveau</span>' if is_new else '<span class="badge">Reconduit</span>'
-        top2_html += f"""
-        <div class="top-block">
-          <div class="top-rank">Top {i} &mdash; 50%</div>
-          <div class="top-ticker">{_ht(etf['ticker'])}{badge}</div>
-          <div class="top-name">{etf['name']}</div>
-          <div class="top-metrics">
-            <div>
-              <span class="top-metric-label">Score</span>
-              <strong>{_pct(etf['score'])}</strong>
-            </div>
-            <div>
-              <span class="top-metric-label">M3-skip</span>
-              {_pct(etf['ret_3m'])}
-            </div>
-            <div>
-              <span class="top-metric-label">M6-skip</span>
-              {_pct(etf['ret_6m'])}
-            </div>
-          </div>
-        </div>"""
+    thematic_content, thematic_action = _monthly_strategy_block(
+        ranked=ranked_thematic,
+        top_n=top_n_thematic,
+        current=current_thematic,
+        top2_m1_label="M1",
+        top2_m1_key="ret_1m",
+        top2_m2_label="M3",
+        top2_m2_key="ret_3m",
+        rank_col1_label="M1",
+        rank_col1_key="ret_1m",
+        rank_col2_label="M3",
+        rank_col2_key="ret_3m",
+        ma_label="MM150j",
+    )
 
-    if not top_n:
-        top2_html = """
-        <div class="signal">
-          <div class="signal-title">Aucun ETF éligible</div>
-          <div class="signal-body">Tous les ETFs sont sous leur MM200j. Rester en cash.</div>
-        </div>"""
-
-    # ── Classement ────────────────────────────────────────────────────────────
-    ranking_rows = ""
-    for _, row in ranked.iterrows():
-        eligible = row["status"] == "✓"
-        rank_str = f"{int(row['rank'])}" if pd.notna(row.get("rank")) else "—"
-        style = ' class="exclu"' if not eligible else ""
-        status_cell = "" if eligible else f'<span style="font-size:10px;color:#999;">{row["status"]}</span>'
-
-        ranking_rows += f"""
-        <tr{style}>
-          <td class="num" style="color:#999;font-size:11px;">{rank_str}</td>
-          <td><strong>{_ht(row['ticker'])}</strong></td>
-          <td style="color:#555;font-size:11px;">{row['name']}</td>
-          <td>{row['sector']}</td>
-          <td style="color:#999;">{row['region']}</td>
-          <td class="num" style="{_weight(row['ret_3m'])}">{_pct(row['ret_3m'])}</td>
-          <td class="num" style="{_weight(row['ret_6m'])}">{_pct(row['ret_6m'])}</td>
-          <td class="num" style="{_weight(row['score'])}font-size:13px;">{_pct(row['score'])}</td>
-          <td style="font-size:10px;color:#999;">{status_cell}</td>
-        </tr>"""
+    any_action = macro_action or thematic_action
+    cta_html   = _cta_button(confirm_url) if any_action else ""
 
     month_fr = {
         1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
@@ -539,30 +727,18 @@ def generate_monthly_report(
     <div class="masthead-sub">Rebalancement &mdash; {month_fr} {run_date.year}</div>
   </div>
 
-  {signal_html}
+  <div class="strategy-header" style="margin-top:0;">Stratégie Macro &mdash; 21 ETFs</div>
+  {macro_content}
 
-  <div class="section">
-    <div class="section-label">Allocation cible</div>
-    {top2_html}
-  </div>
+  <div class="strategy-header">Stratégie Thématique &mdash; 10 ETFs</div>
+  {thematic_content}
 
-  <div class="section">
-    <div class="section-label">Momentum — 21 ETFs</div>
-    <table>
-      <thead><tr>
-        <th class="num">#</th>
-        <th>Ticker</th><th>Nom</th><th>Secteur</th><th>Zone</th>
-        <th class="num">M3-skip</th>
-        <th class="num">M6-skip</th>
-        <th class="num">Score</th>
-        <th>Statut</th>
-      </tr></thead>
-      <tbody>{ranking_rows}</tbody>
-    </table>
-  </div>
+  {cta_html}
 
   <div class="footer">
-    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Score = 50% M3-skip + 50% M6-skip &mdash; Filtre MM200j
+    Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash;
+    Macro : 50% M3-skip + 50% M6-skip · Filtre MM200j &mdash;
+    Thématique : 60% M1 + 40% M3 · Filtre MM150j
   </div>
 </body>
 </html>"""

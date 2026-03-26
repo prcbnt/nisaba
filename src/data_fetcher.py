@@ -2,7 +2,8 @@
 data_fetcher.py — Téléchargement et normalisation des données de cours via yfinance.
 
 Responsabilités :
-- Téléchargement des cours de clôture ajustés pour les 21 ETFs + SPY + EURUSD=X
+- Téléchargement des cours de clôture ajustés pour TOUS les ETFs (macro + thématique) + SPY + EURUSD=X
+  en un seul appel API (évite la double facturation de quotas yfinance).
 - Conversion EUR→USD pour les ETFs Xetra
 - Détection et signalement des données manquantes (aucune erreur silencieuse)
 """
@@ -26,7 +27,9 @@ class DataFetcher:
         with open(config_path / "settings.yaml") as f:
             self._settings = yaml.safe_load(f)
 
+        # Univers macro + thématique combinés (un seul appel yfinance)
         self.universe: list[dict] = self._ticker_cfg["universe"]
+        self.universe_thematic: list[dict] = self._ticker_cfg.get("universe_thematic", [])
         self.eur_tickers: set[str] = set(self._ticker_cfg["eur_tickers"])
         self.benchmark: str = self._ticker_cfg["benchmark"]
         self.fx_ticker: str = self._ticker_cfg["fx_ticker"]
@@ -53,10 +56,12 @@ class DataFetcher:
 
     def _fetch_raw(self, period_days: int) -> pd.DataFrame:
         start = (datetime.today() - timedelta(days=period_days)).strftime("%Y-%m-%d")
-        all_tickers = [etf["ticker"] for etf in self.universe] + [
-            self.benchmark,
-            self.fx_ticker,
-        ]
+        all_tickers = (
+            [etf["ticker"] for etf in self.universe]
+            + [etf["ticker"] for etf in self.universe_thematic]
+            + [self.benchmark, self.fx_ticker]
+        )
+        all_tickers = list(dict.fromkeys(all_tickers))  # dédoublonnage, ordre préservé
 
         logger.info(f"Téléchargement de {len(all_tickers)} tickers depuis {start}…")
 

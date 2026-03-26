@@ -4,8 +4,9 @@ run_weekly.py — Rapport hebdomadaire Nisabā.
 
 Exécuté chaque lundi (sauf le premier lundi du mois, géré par run_monthly.py).
 Contenu de l'email :
-  - Portfolio Allocation : comparaison allocation actuelle vs cible + signal rebalancement
-  - Classement momentum complet des 21 ETFs
+  - Stratégie Macro : signal + allocation actuelle vs cible + classement 21 ETFs
+  - Stratégie Thématique : signal + allocation actuelle vs cible + classement 10 ETFs
+  - Bouton CTA unique si au moins une stratégie nécessite un rebalancement
 """
 
 import logging
@@ -42,21 +43,31 @@ def main() -> None:
     sender = EmailSender(CONFIG)
 
     try:
-        fetcher   = DataFetcher(CONFIG)
-        scorer    = MomentumScorer(CONFIG)
-        portfolio = PortfolioManager(DATA / "portfolio_state.json")
+        fetcher = DataFetcher(CONFIG)
 
-        # 1. Données
+        scorer_macro     = MomentumScorer(CONFIG, strategy="macro")
+        scorer_thematic  = MomentumScorer(CONFIG, strategy="thematic")
+        portfolio_macro     = PortfolioManager(DATA / "portfolio_state.json", strategy="macro")
+        portfolio_thematic  = PortfolioManager(DATA / "portfolio_state.json", strategy="thematic")
+
+        # 1. Données (un seul appel pour les deux univers)
         logger.info("Étape 1/3 : téléchargement des cours…")
         prices = fetcher.get_processed_prices()
 
-        # 2. Scores + Top 2 + allocation actuelle
+        # 2. Scores + Top 2 + allocations actuelles
         logger.info("Étape 2/3 : calcul des scores momentum…")
-        ranked  = scorer.compute_scores(prices)
-        top_n   = scorer.get_top_n(ranked, n=2)
-        current = portfolio.get_current_allocation()
+        ranked_macro    = scorer_macro.compute_scores(prices)
+        top_n_macro     = scorer_macro.get_top_n(ranked_macro, n=2)
+        current_macro   = portfolio_macro.get_current_allocation()
 
-        # SPY performance M1
+        ranked_thematic   = scorer_thematic.compute_scores(prices)
+        top_n_thematic    = scorer_thematic.get_top_n(ranked_thematic, n=2)
+        current_thematic  = portfolio_thematic.get_current_allocation()
+
+        logger.info(f"[macro]     Top 2 : {[e['ticker'] for e in top_n_macro]}")
+        logger.info(f"[thematic]  Top 2 : {[e['ticker'] for e in top_n_thematic]}")
+
+        # SPY performance M1 (benchmark macro)
         spy_series = prices["SPY"].dropna()
         spy_ret_1m = (
             float(spy_series.iloc[-1] / spy_series.iloc[-22] - 1)
@@ -67,7 +78,18 @@ def main() -> None:
         logger.info("Étape 3/3 : envoi de l'email…")
         pat = os.environ.get("CONFIRM_PAT", "").strip()
         confirm_url = f"{_CONFIRM_BASE_URL}#{pat}" if pat else None
-        html = generate_weekly_report(ranked, top_n, current, spy_ret_1m, date.today(), confirm_url=confirm_url)
+
+        html = generate_weekly_report(
+            ranked_macro=ranked_macro,
+            top_n_macro=top_n_macro,
+            current_macro=current_macro,
+            spy_ret_1m=spy_ret_1m,
+            ranked_thematic=ranked_thematic,
+            top_n_thematic=top_n_thematic,
+            current_thematic=current_thematic,
+            run_date=date.today(),
+            confirm_url=confirm_url,
+        )
         subject = f"Nisabā — {date.today().strftime('%d/%m/%Y')}"
         sender.send(subject, html)
 

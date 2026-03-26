@@ -1,9 +1,7 @@
-# Univers des 21 ETFs — US (7 secteurs) + Europe (7 secteurs) + International (7 zones géo)
-# Cotation : US et International en USD, Europe en EUR (Xetra)
+# Univers des ETFs — deux stratégies indépendantes
 #
-# La colonne "International" remplace l'ancienne colonne EM sectorielle.
-# Approche géographique : Asie (FXI, INDA, EWY), Amérique Latine (EWZ, ILF),
-#                         MENA (KSA), Japon (EWJ)
+# universe          : Stratégie Macro — US (7 secteurs) + Europe (7 secteurs) + International (7 zones géo)
+# universe_thematic : Stratégie Thématique — secteurs de pointe + matières premières critiques
 
 universe:
   # ── Technologie ──────────────────────────────────────────────────────────
@@ -131,7 +129,6 @@ universe:
     name: "iShares MSCI Europe Aerospace & Defense"
     sector: Défense
     region: Europe
-    # Note: EUAD est sur CBOE Europe, coté en USD.
     currency: USD
 
   - ticker: EWJ
@@ -139,6 +136,72 @@ universe:
     sector: Japon
     region: Japon
     currency: USD
+
+
+# ── Stratégie Thématique ──────────────────────────────────────────────────────
+universe_thematic:
+  # Secteurs de pointe
+  - ticker: SMH
+    name: "VanEck Semiconductor ETF"
+    sector: Semi-conducteurs
+    region: Thématique
+    currency: USD
+
+  - ticker: AIQ
+    name: "Global X AI & Technology ETF"
+    sector: Intelligence Artificielle
+    region: Thématique
+    currency: USD
+
+  - ticker: BOTZ
+    name: "Global X Robotics & AI ETF"
+    sector: Robotique
+    region: Thématique
+    currency: USD
+
+  - ticker: ARKX
+    name: "ARK Space Exploration & Innovation ETF"
+    sector: Spatial
+    region: Thématique
+    currency: USD
+
+  - ticker: URA
+    name: "Global X Uranium ETF"
+    sector: Nucléaire
+    region: Thématique
+    currency: USD
+
+  - ticker: XBI
+    name: "SPDR S&P Biotech ETF"
+    sector: Biotech
+    region: Thématique
+    currency: USD
+
+  # Matières premières critiques
+  - ticker: COPX
+    name: "Global X Copper Miners ETF"
+    sector: Cuivre
+    region: Matières Premières
+    currency: USD
+
+  - ticker: GDX
+    name: "VanEck Gold Miners ETF"
+    sector: Or
+    region: Matières Premières
+    currency: USD
+
+  - ticker: SLV
+    name: "iShares Silver Trust"
+    sector: Argent
+    region: Matières Premières
+    currency: USD
+
+  - ticker: REMX
+    name: "VanEck Rare Earth/Strategic Metals ETF"
+    sector: Terres Rares
+    region: Matières Premières
+    currency: USD
+
 
 # Tickers EUR (Xetra) — seront convertis EUR→USD avant calcul
 eur_tickers:
@@ -148,7 +211,6 @@ eur_tickers:
   - EXV6.DE
   - EXV5.DE
   - EXV3.DE
-  # EUAD exclu : coté en USD sur CBOE Europe
 
 # Benchmark et taux de change
 benchmark: SPY

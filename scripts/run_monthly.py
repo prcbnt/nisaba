@@ -5,10 +5,9 @@ run_monthly.py — Rapport mensuel de rebalancement Nisabā.
 Exécuté le premier lundi de chaque mois (GitHub Actions détecte ce lundi
 via la condition day-of-month 1–7 dans le workflow).
 Contenu de l'email :
-  - Signal REBALANCER / CONSERVER / INITIALISER
-  - Nouveau Top 1 / Top 2 avec score détaillé
-  - Classement complet des 21 ETFs
-  - Bouton CTA "Confirmer le rebalancement" (1-clic via GitHub Pages)
+  - Stratégie Macro : signal REBALANCER / CONSERVER + Top 2 + classement 21 ETFs
+  - Stratégie Thématique : signal REBALANCER / CONSERVER + Top 2 + classement 10 ETFs
+  - Bouton CTA unique si au moins une stratégie nécessite un rebalancement
 
 Note : portfolio_state.json n'est PAS mis à jour ici.
        Il le sera uniquement quand tu cliqueras "Confirmer le rebalancement"
@@ -49,34 +48,54 @@ def main() -> None:
     sender = EmailSender(CONFIG)
 
     try:
-        fetcher   = DataFetcher(CONFIG)
-        scorer    = MomentumScorer(CONFIG)
-        portfolio = PortfolioManager(DATA / "portfolio_state.json")
+        fetcher = DataFetcher(CONFIG)
 
-        # 1. Données
+        scorer_macro     = MomentumScorer(CONFIG, strategy="macro")
+        scorer_thematic  = MomentumScorer(CONFIG, strategy="thematic")
+        portfolio_macro     = PortfolioManager(DATA / "portfolio_state.json", strategy="macro")
+        portfolio_thematic  = PortfolioManager(DATA / "portfolio_state.json", strategy="thematic")
+
+        # 1. Données (un seul appel pour les deux univers)
         logger.info("Étape 1/3 : téléchargement des cours…")
         prices = fetcher.get_processed_prices()
 
-        # 2. Scores
+        # 2. Scores + Top 2 + allocations actuelles
         logger.info("Étape 2/3 : calcul des scores momentum…")
-        ranked   = scorer.compute_scores(prices)
-        top_n    = scorer.get_top_n(ranked, n=2)
-        current  = portfolio.get_current_allocation()
-        needs_rb = portfolio.needs_rebalancing(top_n)
+        ranked_macro    = scorer_macro.compute_scores(prices)
+        top_n_macro     = scorer_macro.get_top_n(ranked_macro, n=2)
+        current_macro   = portfolio_macro.get_current_allocation()
+        needs_rb_macro  = portfolio_macro.needs_rebalancing(top_n_macro)
 
-        action = "REBALANCER" if needs_rb else "CONSERVER"
-        if not current:
-            action = "INITIALISER"
+        ranked_thematic   = scorer_thematic.compute_scores(prices)
+        top_n_thematic    = scorer_thematic.get_top_n(ranked_thematic, n=2)
+        current_thematic  = portfolio_thematic.get_current_allocation()
+        needs_rb_thematic = portfolio_thematic.needs_rebalancing(top_n_thematic)
 
-        logger.info(f"Signal : {action}")
-        if top_n:
-            logger.info(f"Nouveau Top 2 : {[e['ticker'] for e in top_n]}")
+        def _action(needs_rb, current):
+            if not current:   return "INITIALISER"
+            if needs_rb:      return "REBALANCER"
+            return "CONSERVER"
+
+        logger.info(f"[macro]     Signal : {_action(needs_rb_macro, current_macro)}")
+        logger.info(f"[macro]     Top 2  : {[e['ticker'] for e in top_n_macro]}")
+        logger.info(f"[thematic]  Signal : {_action(needs_rb_thematic, current_thematic)}")
+        logger.info(f"[thematic]  Top 2  : {[e['ticker'] for e in top_n_thematic]}")
 
         # 3. Génération du rapport + envoi email
         logger.info("Étape 3/3 : envoi email…")
         pat = os.environ.get("CONFIRM_PAT", "").strip()
         confirm_url = f"{_CONFIRM_BASE_URL}#{pat}" if pat else None
-        html = generate_monthly_report(ranked, top_n, current, date.today(), confirm_url=confirm_url)
+
+        html = generate_monthly_report(
+            ranked_macro=ranked_macro,
+            top_n_macro=top_n_macro,
+            current_macro=current_macro,
+            ranked_thematic=ranked_thematic,
+            top_n_thematic=top_n_thematic,
+            current_thematic=current_thematic,
+            run_date=date.today(),
+            confirm_url=confirm_url,
+        )
 
         month_fr = {
             1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
