@@ -4,9 +4,10 @@ run_weekly.py — Rapport hebdomadaire Nisabā.
 
 Exécuté chaque lundi (sauf le premier lundi du mois, géré par run_monthly.py).
 Contenu de l'email :
+  - Tableau récapitulatif (toutes stratégies + benchmarks SPY/IEF)
   - Stratégie Macro : signal + allocation actuelle vs cible + classement 21 ETFs
   - Stratégie Thématique : signal + allocation actuelle vs cible + classement 10 ETFs
-  - Bouton CTA unique si au moins une stratégie nécessite un rebalancement
+  - Satellite (DBMF) : signal + allocation
 """
 
 import logging
@@ -60,18 +61,28 @@ def main() -> None:
     sender = EmailSender(CONFIG)
 
     try:
+        import yaml
+        with open(CONFIG / "settings.yaml") as f:
+            settings = yaml.safe_load(f)
+        portfolio_weights = {
+            s: cfg.get("portfolio_weight", 1/3)
+            for s, cfg in settings.get("strategies", {}).items()
+        }
+
         fetcher = DataFetcher(CONFIG)
 
-        scorer_macro     = MomentumScorer(CONFIG, strategy="macro")
-        scorer_thematic  = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_macro      = MomentumScorer(CONFIG, strategy="macro")
+        scorer_thematic   = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_satellite  = MomentumScorer(CONFIG, strategy="satellite")
         portfolio_macro     = PortfolioManager(DATA / "portfolio_state.json", strategy="macro")
         portfolio_thematic  = PortfolioManager(DATA / "portfolio_state.json", strategy="thematic")
+        portfolio_satellite = PortfolioManager(DATA / "portfolio_state.json", strategy="satellite")
 
-        # 1. Données (un seul appel pour les deux univers)
+        # 1. Données (un seul appel pour tous les univers)
         logger.info("Étape 1/3 : téléchargement des cours…")
         prices = fetcher.get_processed_prices()
 
-        # 2. Scores + Top 2 + allocations actuelles
+        # 2. Scores + Top N + allocations actuelles
         logger.info("Étape 2/3 : calcul des scores momentum…")
         ranked_macro    = scorer_macro.compute_scores(prices)
         top_n_macro     = scorer_macro.get_top_n(ranked_macro, n=2)
@@ -81,6 +92,10 @@ def main() -> None:
         top_n_thematic    = scorer_thematic.get_top_n(ranked_thematic, n=2)
         current_thematic  = portfolio_thematic.get_current_allocation()
 
+        ranked_satellite  = scorer_satellite.compute_scores(prices)
+        top_n_satellite   = scorer_satellite.get_top_n(ranked_satellite, n=1)
+        current_satellite = portfolio_satellite.get_current_allocation()
+
         # Substitution défensive si aucun ETF éligible (Antonacci)
         if not top_n_macro:
             logger.info("[macro]     Aucun ETF éligible — position défensive IEF")
@@ -88,15 +103,28 @@ def main() -> None:
         if not top_n_thematic:
             logger.info("[thematic]  Aucun ETF éligible — position défensive IEF")
             top_n_thematic = [dict(_DEFENSIVE)]
+        # Satellite : DBMF toujours présent (filtre désactivé), pas de fallback nécessaire
 
         logger.info(f"[macro]     Top 2 : {[e['ticker'] for e in top_n_macro]}")
         logger.info(f"[thematic]  Top 2 : {[e['ticker'] for e in top_n_thematic]}")
+        logger.info(f"[satellite] Top 1 : {[e['ticker'] for e in top_n_satellite]}")
 
-        # SPY performance M1 (benchmark macro)
+        # Performance 1S des positions actuelles
+        perf_macro     = portfolio_macro.compute_weekly_performance(prices)
+        perf_thematic  = portfolio_thematic.compute_weekly_performance(prices)
+        perf_satellite = portfolio_satellite.compute_weekly_performance(prices)
+
+        # Benchmarks 1S
+        _DAYS_1W = 6  # 5 jours de bourse + 1
         spy_series = prices["SPY"].dropna()
-        spy_ret_1m = (
-            float(spy_series.iloc[-1] / spy_series.iloc[-22] - 1)
-            if len(spy_series) >= 22 else None
+        ief_series = prices["IEF"].dropna()
+        spy_ret_1w = (
+            float(spy_series.iloc[-1] / spy_series.iloc[-_DAYS_1W] - 1)
+            if len(spy_series) >= _DAYS_1W else None
+        )
+        ief_ret_1w = (
+            float(ief_series.iloc[-1] / ief_series.iloc[-_DAYS_1W] - 1)
+            if len(ief_series) >= _DAYS_1W else None
         )
 
         # 3. Génération et envoi
@@ -108,10 +136,18 @@ def main() -> None:
             ranked_macro=ranked_macro,
             top_n_macro=top_n_macro,
             current_macro=current_macro,
-            spy_ret_1m=spy_ret_1m,
+            perf_macro=perf_macro,
             ranked_thematic=ranked_thematic,
             top_n_thematic=top_n_thematic,
             current_thematic=current_thematic,
+            perf_thematic=perf_thematic,
+            ranked_satellite=ranked_satellite,
+            top_n_satellite=top_n_satellite,
+            current_satellite=current_satellite,
+            perf_satellite=perf_satellite,
+            spy_ret_1w=spy_ret_1w,
+            ief_ret_1w=ief_ret_1w,
+            portfolio_weights=portfolio_weights,
             run_date=date.today(),
             confirm_url=confirm_url,
         )

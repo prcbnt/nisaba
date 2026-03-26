@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Clé de l'univers dans tickers.yaml par stratégie
 _UNIVERSE_KEY = {
-    "macro":    "universe",
-    "thematic": "universe_thematic",
+    "macro":     "universe",
+    "thematic":  "universe_thematic",
+    "satellite": "universe_satellite",
 }
 
 
@@ -101,7 +102,8 @@ class MomentumScorer:
 
         series = prices[ticker].dropna()
 
-        if len(series) < self.ma_days + 1:
+        min_required = max(self.ma_days, self.days_1m + self.skip_days + 1) if self.ma_days > 0 else self.days_1m + 2
+        if len(series) < min_required:
             logger.warning(
                 f"[{self.strategy}] {ticker} : historique trop court "
                 f"({len(series)} j < {self.ma_days + 1})"
@@ -110,8 +112,12 @@ class MomentumScorer:
                                   "données insuffisantes")
 
         current = float(series.iloc[-1])
-        ma = float(series.tail(self.ma_days).mean())
-        above_ma = current > ma
+        if self.ma_days > 0:
+            ma = float(series.tail(self.ma_days).mean())
+            above_ma = current > ma
+        else:
+            ma = None       # Filtre désactivé (satellite)
+            above_ma = True
 
         ret_1m = self._return(series, self.days_1m, 0) if self.weight_1m > 0 else np.nan
         ret_3m = self._return(series, self.days_3m, self.skip_days)
@@ -137,7 +143,7 @@ class MomentumScorer:
             status = "✓"
 
         return self._make_row(etf, series, ret_1m, ret_3m, ret_6m, score,
-                              above_ma, status, ma, current)
+                              above_ma, status, ma if self.ma_days > 0 else None, current)
 
     @staticmethod
     def _return(series: pd.Series, lookback_days: int, skip_days: int = 0) -> float:

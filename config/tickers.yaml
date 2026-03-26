@@ -203,6 +203,15 @@ universe_thematic:
     currency: USD
 
 
+# ── Stratégie Satellite ───────────────────────────────────────────────────────
+universe_satellite:
+  - ticker: DBMF
+    name: "iMGP DBi Managed Futures Strategy ETF"
+    sector: "Managed Futures"
+    region: "Satellite"
+    currency: USD
+
+
 # Tickers EUR (Xetra) — seront convertis EUR→USD avant calcul
 eur_tickers:
   - EXV1.DE

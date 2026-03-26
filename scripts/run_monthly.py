@@ -2,11 +2,12 @@
 """
 run_monthly.py — Rapport mensuel de rebalancement Nisabā.
 
-Exécuté le premier lundi de chaque mois (GitHub Actions détecte ce lundi
-via la condition day-of-month 1–7 dans le workflow).
+Exécuté le premier lundi de chaque mois.
 Contenu de l'email :
+  - Tableau récapitulatif (toutes stratégies + benchmarks SPY/IEF 1M)
   - Stratégie Macro : signal REBALANCER / CONSERVER + Top 2 + classement 21 ETFs
   - Stratégie Thématique : signal REBALANCER / CONSERVER + Top 2 + classement 10 ETFs
+  - Satellite (DBMF) : signal + allocation
   - Bouton CTA unique si au moins une stratégie nécessite un rebalancement
 
 Note : portfolio_state.json n'est PAS mis à jour ici.
@@ -65,18 +66,28 @@ def main() -> None:
     sender = EmailSender(CONFIG)
 
     try:
+        import yaml
+        with open(CONFIG / "settings.yaml") as f:
+            settings = yaml.safe_load(f)
+        portfolio_weights = {
+            s: cfg.get("portfolio_weight", 1/3)
+            for s, cfg in settings.get("strategies", {}).items()
+        }
+
         fetcher = DataFetcher(CONFIG)
 
-        scorer_macro     = MomentumScorer(CONFIG, strategy="macro")
-        scorer_thematic  = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_macro      = MomentumScorer(CONFIG, strategy="macro")
+        scorer_thematic   = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_satellite  = MomentumScorer(CONFIG, strategy="satellite")
         portfolio_macro     = PortfolioManager(DATA / "portfolio_state.json", strategy="macro")
         portfolio_thematic  = PortfolioManager(DATA / "portfolio_state.json", strategy="thematic")
+        portfolio_satellite = PortfolioManager(DATA / "portfolio_state.json", strategy="satellite")
 
-        # 1. Données (un seul appel pour les deux univers)
+        # 1. Données (un seul appel pour tous les univers)
         logger.info("Étape 1/3 : téléchargement des cours…")
         prices = fetcher.get_processed_prices()
 
-        # 2. Scores + Top 2 + allocations actuelles
+        # 2. Scores + Top N + allocations actuelles
         logger.info("Étape 2/3 : calcul des scores momentum…")
         ranked_macro    = scorer_macro.compute_scores(prices)
         top_n_macro     = scorer_macro.get_top_n(ranked_macro, n=2)
@@ -87,6 +98,11 @@ def main() -> None:
         top_n_thematic    = scorer_thematic.get_top_n(ranked_thematic, n=2)
         current_thematic  = portfolio_thematic.get_current_allocation()
         needs_rb_thematic = portfolio_thematic.needs_rebalancing(top_n_thematic)
+
+        ranked_satellite   = scorer_satellite.compute_scores(prices)
+        top_n_satellite    = scorer_satellite.get_top_n(ranked_satellite, n=1)
+        current_satellite  = portfolio_satellite.get_current_allocation()
+        needs_rb_satellite = portfolio_satellite.needs_rebalancing(top_n_satellite)
 
         # Substitution défensive si aucun ETF éligible (Antonacci)
         if not top_n_macro:
@@ -105,6 +121,21 @@ def main() -> None:
         logger.info(f"[macro]     Top 2  : {[e['ticker'] for e in top_n_macro]}")
         logger.info(f"[thematic]  Signal : {_action(needs_rb_thematic, current_thematic)}")
         logger.info(f"[thematic]  Top 2  : {[e['ticker'] for e in top_n_thematic]}")
+        logger.info(f"[satellite] Signal : {_action(needs_rb_satellite, current_satellite)}")
+        logger.info(f"[satellite] Top 1  : {[e['ticker'] for e in top_n_satellite]}")
+
+        # Benchmarks 1M
+        _DAYS_1M = 22
+        spy_series = prices["SPY"].dropna()
+        ief_series = prices["IEF"].dropna()
+        spy_ret_1m = (
+            float(spy_series.iloc[-1] / spy_series.iloc[-_DAYS_1M] - 1)
+            if len(spy_series) >= _DAYS_1M else None
+        )
+        ief_ret_1m = (
+            float(ief_series.iloc[-1] / ief_series.iloc[-_DAYS_1M] - 1)
+            if len(ief_series) >= _DAYS_1M else None
+        )
 
         # 3. Génération du rapport + envoi email
         logger.info("Étape 3/3 : envoi email…")
@@ -118,6 +149,12 @@ def main() -> None:
             ranked_thematic=ranked_thematic,
             top_n_thematic=top_n_thematic,
             current_thematic=current_thematic,
+            ranked_satellite=ranked_satellite,
+            top_n_satellite=top_n_satellite,
+            current_satellite=current_satellite,
+            spy_ret_1m=spy_ret_1m,
+            ief_ret_1m=ief_ret_1m,
+            portfolio_weights=portfolio_weights,
             run_date=date.today(),
             confirm_url=confirm_url,
         )

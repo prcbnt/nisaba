@@ -266,6 +266,151 @@ _BASE_CSS = """
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Tableaux récapitulatifs (en tête d'email)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _summary_weekly(
+    strategies: list[dict],   # [{label, portfolio_weight, top_n, current, perf_1w}]
+    spy_ret_1w: float | None,
+    ief_ret_1w: float | None,
+) -> str:
+    """Tableau récapitulatif hebdomadaire : une ligne par stratégie + benchmarks."""
+    rows = ""
+    for s in strategies:
+        current_tickers = {h["ticker"] for h in s["current"]}
+        target_tickers  = {e["ticker"] for e in s["top_n"][:2]}
+        needs_rb        = current_tickers != target_tickers
+        needs_init      = not s["current"] and bool(s["top_n"])
+        if needs_init:
+            action_html = '<span style="font-weight:700;">Initialiser</span>'
+        elif needs_rb:
+            action_html = '<span style="font-weight:700;">Rebalancer</span>'
+        else:
+            action_html = '<span style="color:#999;">Conserver</span>'
+
+        holdings = ", ".join(_ht(t) for t in current_tickers) if current_tickers else "—"
+
+        # Perf 1S pondérée du portefeuille (holdings actuels)
+        perf_1w = None
+        if s.get("perf_1w"):
+            total = sum(
+                (v.get("ret_1w") or 0) * v.get("weight", 0.5)
+                for v in s["perf_1w"].values()
+                if v.get("ret_1w") is not None
+            )
+            if any(v.get("ret_1w") is not None for v in s["perf_1w"].values()):
+                perf_1w = total
+
+        weight_pct = f"{int(s['portfolio_weight'] * 100)}%"
+        rows += f"""
+        <tr>
+          <td style="font-weight:700;">{s['label']}</td>
+          <td class="num">{weight_pct}</td>
+          <td style="font-size:11px;color:#555;">{holdings}</td>
+          <td class="num" style="{_weight(perf_1w)}">{_pct(perf_1w)}</td>
+          <td style="font-size:11px;">{action_html}</td>
+        </tr>"""
+
+    # Lignes benchmark
+    rows += f"""
+        <tr style="border-top:1px solid #ccc;">
+          <td style="color:#999;">SPY</td>
+          <td class="num" style="color:#999;font-size:10px;">Réf.</td>
+          <td style="color:#999;font-size:11px;">S&amp;P 500</td>
+          <td class="num" style="{_weight(spy_ret_1w)}color:#999;">{_pct(spy_ret_1w)}</td>
+          <td style="color:#999;font-size:10px;">Benchmark</td>
+        </tr>
+        <tr>
+          <td style="color:#999;">IEF</td>
+          <td class="num" style="color:#999;font-size:10px;">Réf.</td>
+          <td style="color:#999;font-size:11px;">US Treasuries 7-10 ans</td>
+          <td class="num" style="{_weight(ief_ret_1w)}color:#999;">{_pct(ief_ret_1w)}</td>
+          <td style="color:#999;font-size:10px;">Benchmark</td>
+        </tr>"""
+
+    return f"""
+    <div class="section" style="margin-bottom:44px;">
+      <div class="section-label">Résumé du portefeuille</div>
+      <table>
+        <thead><tr>
+          <th>Stratégie</th>
+          <th class="num">Poids</th>
+          <th>Holdings</th>
+          <th class="num">Perf 1S</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>"""
+
+
+def _summary_monthly(
+    strategies: list[dict],   # [{label, portfolio_weight, top_n, current}]
+    spy_ret_1m: float | None,
+    ief_ret_1m: float | None,
+) -> str:
+    """Tableau récapitulatif mensuel : une ligne par stratégie + benchmarks 1M."""
+    rows = ""
+    for s in strategies:
+        current_tickers = {h["ticker"] for h in s["current"]}
+        target_tickers  = {e["ticker"] for e in s["top_n"][:2]}
+        needs_rb        = current_tickers != target_tickers
+        needs_init      = not s["current"] and bool(s["top_n"])
+        if needs_init:
+            action_html = '<span style="font-weight:700;">Initialiser</span>'
+        elif needs_rb:
+            action_html = '<span style="font-weight:700;">Rebalancer</span>'
+        else:
+            action_html = '<span style="color:#999;">Conserver</span>'
+
+        current_str = ", ".join(_ht(t) for t in current_tickers) if current_tickers else "—"
+        target_str  = ", ".join(_ht(e["ticker"]) for e in s["top_n"][:2]) if s["top_n"] else "—"
+        weight_pct  = f"{int(s['portfolio_weight'] * 100)}%"
+
+        rows += f"""
+        <tr>
+          <td style="font-weight:700;">{s['label']}</td>
+          <td class="num">{weight_pct}</td>
+          <td style="color:#999;font-size:11px;">{current_str}</td>
+          <td style="color:#999;font-size:11px;padding:0 4px;">→</td>
+          <td style="font-size:11px;font-weight:700;">{target_str}</td>
+          <td style="font-size:11px;">{action_html}</td>
+        </tr>"""
+
+    rows += f"""
+        <tr style="border-top:1px solid #ccc;">
+          <td style="color:#999;">SPY</td>
+          <td class="num" style="color:#999;font-size:10px;">Réf.</td>
+          <td colspan="2" style="color:#999;font-size:11px;">S&amp;P 500</td>
+          <td class="num" style="{_weight(spy_ret_1m)}color:#999;">{_pct(spy_ret_1m)}</td>
+          <td style="color:#999;font-size:10px;">1M</td>
+        </tr>
+        <tr>
+          <td style="color:#999;">IEF</td>
+          <td class="num" style="color:#999;font-size:10px;">Réf.</td>
+          <td colspan="2" style="color:#999;font-size:11px;">US Treasuries 7-10 ans</td>
+          <td class="num" style="{_weight(ief_ret_1m)}color:#999;">{_pct(ief_ret_1m)}</td>
+          <td style="color:#999;font-size:10px;">1M</td>
+        </tr>"""
+
+    return f"""
+    <div class="section" style="margin-bottom:44px;">
+      <div class="section-label">Résumé du rebalancement</div>
+      <table>
+        <thead><tr>
+          <th>Stratégie</th>
+          <th class="num">Poids</th>
+          <th>Actuel</th>
+          <th></th>
+          <th>Cible</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Blocs de rendu par stratégie (privés)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -613,25 +758,35 @@ def generate_weekly_report(
     ranked_macro: pd.DataFrame,
     top_n_macro: list[dict],
     current_macro: list[dict],
-    spy_ret_1m: float | None,
+    perf_macro: dict,
     ranked_thematic: pd.DataFrame,
     top_n_thematic: list[dict],
     current_thematic: list[dict],
+    perf_thematic: dict,
+    ranked_satellite: pd.DataFrame,
+    top_n_satellite: list[dict],
+    current_satellite: list[dict],
+    perf_satellite: dict,
+    spy_ret_1w: float | None,
+    ief_ret_1w: float | None,
+    portfolio_weights: dict,
     run_date: date | None = None,
     confirm_url: str | None = None,
 ) -> str:
     run_date = run_date or date.today()
 
-    # Ligne SPY benchmark (uniquement dans la section macro)
-    spy_row = f"""
-    <tr>
-      <td style="color:#999;"><strong>SPY</strong></td>
-      <td style="color:#999;font-size:11px;">S&amp;P 500</td>
-      <td class="num" style="color:#999;">—</td>
-      <td class="num" style="{_weight(spy_ret_1m)}color:#999;">{_pct(spy_ret_1m)}</td>
-      <td class="num" style="color:#999;">—</td>
-      <td style="color:#999;font-size:11px;">Benchmark</td>
-    </tr>"""
+    summary_html = _summary_weekly(
+        strategies=[
+            {"label": "Macro",      "portfolio_weight": portfolio_weights.get("macro", 0.45),
+             "top_n": top_n_macro,     "current": current_macro,     "perf_1w": perf_macro},
+            {"label": "Thématique", "portfolio_weight": portfolio_weights.get("thematic", 0.45),
+             "top_n": top_n_thematic,  "current": current_thematic,  "perf_1w": perf_thematic},
+            {"label": "Satellite",  "portfolio_weight": portfolio_weights.get("satellite", 0.10),
+             "top_n": top_n_satellite, "current": current_satellite, "perf_1w": perf_satellite},
+        ],
+        spy_ret_1w=spy_ret_1w,
+        ief_ret_1w=ief_ret_1w,
+    )
 
     macro_content, macro_action = _weekly_strategy_block(
         ranked=ranked_macro,
@@ -644,7 +799,6 @@ def generate_weekly_report(
         rank_col2_label="M6-skip",
         rank_col2_key="ret_6m",
         ma_label="MM200j",
-        extra_rows=spy_row,
     )
 
     thematic_content, thematic_action = _weekly_strategy_block(
@@ -660,7 +814,20 @@ def generate_weekly_report(
         ma_label="MM150j",
     )
 
-    any_action = macro_action or thematic_action
+    satellite_content, satellite_action = _weekly_strategy_block(
+        ranked=ranked_satellite,
+        top_n=top_n_satellite,
+        current=current_satellite,
+        alloc_col_label="M1",
+        alloc_col_key="ret_1m",
+        rank_col1_label="M1",
+        rank_col1_key="ret_1m",
+        rank_col2_label="Score",
+        rank_col2_key="score",
+        ma_label="—",
+    )
+
+    any_action = macro_action or thematic_action or satellite_action
     cta_html   = _cta_button(confirm_url) if any_action else ""
 
     return f"""<!DOCTYPE html>
@@ -677,18 +844,24 @@ def generate_weekly_report(
     <div class="masthead-sub">Suivi hebdomadaire &mdash; {run_date.strftime('%d %B %Y')}</div>
   </div>
 
+  {summary_html}
+
   <div class="strategy-header" style="margin-top:0;">Stratégie Macro &mdash; 21 ETFs</div>
   {macro_content}
 
   <div class="strategy-header">Stratégie Thématique &mdash; 10 ETFs</div>
   {thematic_content}
 
+  <div class="strategy-header">Satellite &mdash; Managed Futures</div>
+  {satellite_content}
+
   {cta_html}
 
   <div class="footer">
     Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash;
-    Macro : 50% M3-skip + 50% M6-skip · Filtre MM200j &mdash;
-    Thématique : 60% M1 + 40% M3 · Filtre MM150j
+    Macro (45%) : 50% M3-skip + 50% M6-skip · MM200j &mdash;
+    Thématique (45%) : 60% M1 + 40% M3 · MM150j &mdash;
+    Satellite (10%) : DBMF permanent
   </div>
 </body>
 </html>"""
@@ -705,10 +878,29 @@ def generate_monthly_report(
     ranked_thematic: pd.DataFrame,
     top_n_thematic: list[dict],
     current_thematic: list[dict],
+    ranked_satellite: pd.DataFrame,
+    top_n_satellite: list[dict],
+    current_satellite: list[dict],
+    spy_ret_1m: float | None,
+    ief_ret_1m: float | None,
+    portfolio_weights: dict,
     run_date: date | None = None,
     confirm_url: str | None = None,
 ) -> str:
     run_date = run_date or date.today()
+
+    summary_html = _summary_monthly(
+        strategies=[
+            {"label": "Macro",      "portfolio_weight": portfolio_weights.get("macro", 0.45),
+             "top_n": top_n_macro,     "current": current_macro},
+            {"label": "Thématique", "portfolio_weight": portfolio_weights.get("thematic", 0.45),
+             "top_n": top_n_thematic,  "current": current_thematic},
+            {"label": "Satellite",  "portfolio_weight": portfolio_weights.get("satellite", 0.10),
+             "top_n": top_n_satellite, "current": current_satellite},
+        ],
+        spy_ret_1m=spy_ret_1m,
+        ief_ret_1m=ief_ret_1m,
+    )
 
     macro_content, macro_action = _monthly_strategy_block(
         ranked=ranked_macro,
@@ -740,7 +932,22 @@ def generate_monthly_report(
         ma_label="MM150j",
     )
 
-    any_action = macro_action or thematic_action
+    satellite_content, satellite_action = _monthly_strategy_block(
+        ranked=ranked_satellite,
+        top_n=top_n_satellite,
+        current=current_satellite,
+        top2_m1_label="M1",
+        top2_m1_key="ret_1m",
+        top2_m2_label="Score",
+        top2_m2_key="score",
+        rank_col1_label="M1",
+        rank_col1_key="ret_1m",
+        rank_col2_label="Score",
+        rank_col2_key="score",
+        ma_label="—",
+    )
+
+    any_action = macro_action or thematic_action or satellite_action
     cta_html   = _cta_button(confirm_url) if any_action else ""
 
     month_fr = {
@@ -763,18 +970,24 @@ def generate_monthly_report(
     <div class="masthead-sub">Rebalancement &mdash; {month_fr} {run_date.year}</div>
   </div>
 
+  {summary_html}
+
   <div class="strategy-header" style="margin-top:0;">Stratégie Macro &mdash; 21 ETFs</div>
   {macro_content}
 
   <div class="strategy-header">Stratégie Thématique &mdash; 10 ETFs</div>
   {thematic_content}
 
+  <div class="strategy-header">Satellite &mdash; Managed Futures</div>
+  {satellite_content}
+
   {cta_html}
 
   <div class="footer">
     Nisabā &mdash; {run_date.strftime('%d/%m/%Y')} &mdash;
-    Macro : 50% M3-skip + 50% M6-skip · Filtre MM200j &mdash;
-    Thématique : 60% M1 + 40% M3 · Filtre MM150j
+    Macro (45%) : 50% M3-skip + 50% M6-skip · MM200j &mdash;
+    Thématique (45%) : 60% M1 + 40% M3 · MM150j &mdash;
+    Satellite (10%) : DBMF permanent
   </div>
 </body>
 </html>"""

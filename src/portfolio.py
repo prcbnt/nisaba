@@ -22,7 +22,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 _TRADING_DAYS_1W = 5
-_STRATEGIES = ("macro", "thematic")
+_STRATEGIES = ("macro", "thematic", "satellite")
 
 
 class PortfolioManager:

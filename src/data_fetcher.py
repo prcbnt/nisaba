@@ -27,9 +27,10 @@ class DataFetcher:
         with open(config_path / "settings.yaml") as f:
             self._settings = yaml.safe_load(f)
 
-        # Univers macro + thématique combinés (un seul appel yfinance)
+        # Univers macro + thématique + satellite combinés (un seul appel yfinance)
         self.universe: list[dict] = self._ticker_cfg["universe"]
         self.universe_thematic: list[dict] = self._ticker_cfg.get("universe_thematic", [])
+        self.universe_satellite: list[dict] = self._ticker_cfg.get("universe_satellite", [])
         self.eur_tickers: set[str] = set(self._ticker_cfg["eur_tickers"])
         self.benchmark: str = self._ticker_cfg["benchmark"]
         self.fx_ticker: str = self._ticker_cfg["fx_ticker"]
@@ -67,6 +68,7 @@ class DataFetcher:
         all_tickers = (
             [etf["ticker"] for etf in self.universe]
             + [etf["ticker"] for etf in self.universe_thematic]
+            + [etf["ticker"] for etf in self.universe_satellite]
             + self.defensive_tickers
             + [self.benchmark, self.fx_ticker]
         )

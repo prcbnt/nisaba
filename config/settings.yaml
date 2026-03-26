@@ -3,6 +3,7 @@
 # ── Paramètres par stratégie ──────────────────────────────────────────────────
 strategies:
   macro:
+    portfolio_weight: 0.45   # Part du portefeuille total allouée à cette stratégie
     # Signal 3M-skip + 6M-skip (évite le reversal du dernier mois)
     weight_3m: 0.5
     weight_6m: 0.5
@@ -15,6 +16,7 @@ strategies:
     defensive_ticker: "IEF"  # Fallback si aucun ETF > MM200 (Antonacci)
 
   thematic:
+    portfolio_weight: 0.45
     # Signal 1M + 3M sans skip — fenêtre plus courte pour ETFs volatils/tendanciels
     weight_1m: 0.6
     weight_3m: 0.4
@@ -25,6 +27,21 @@ strategies:
     top_n: 2
     weights: [0.5, 0.5]
     defensive_ticker: "IEF"  # Fallback si aucun ETF > MM150
+
+  satellite:
+    portfolio_weight: 0.10
+    # DBMF — managed futures, toujours détenu, pas de filtre MA
+    weight_1m: 1.0
+    weight_3m: 0.0
+    weight_6m: 0.0
+    skip_days: 0
+    trading_days_1m: 21
+    trading_days_3m: 63
+    trading_days_6m: 126
+    ma_filter_days: 0       # 0 = filtre désactivé, position satellite toujours active
+    top_n: 1
+    weights: [1.0]
+    # Pas de defensive_ticker : filtre désactivé, DBMF toujours en top_n
 
 # ── Paramètres legacy (utilisés par backtester.py) ────────────────────────────
 momentum:

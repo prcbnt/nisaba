@@ -62,10 +62,12 @@ def main() -> None:
     try:
         fetcher = DataFetcher(CONFIG)
 
-        scorer_macro     = MomentumScorer(CONFIG, strategy="macro")
-        scorer_thematic  = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_macro      = MomentumScorer(CONFIG, strategy="macro")
+        scorer_thematic   = MomentumScorer(CONFIG, strategy="thematic")
+        scorer_satellite  = MomentumScorer(CONFIG, strategy="satellite")
         portfolio_macro     = PortfolioManager(DATA / "portfolio_state.json", strategy="macro")
         portfolio_thematic  = PortfolioManager(DATA / "portfolio_state.json", strategy="thematic")
+        portfolio_satellite = PortfolioManager(DATA / "portfolio_state.json", strategy="satellite")
 
         # 1. Données
         logger.info("Étape 1/3 : téléchargement des cours…")
@@ -82,6 +84,10 @@ def main() -> None:
         top_n_thematic  = scorer_thematic.get_top_n(ranked_thematic, n=2)
         old_thematic    = portfolio_thematic.get_current_allocation()
 
+        ranked_satellite = scorer_satellite.compute_scores(prices)
+        top_n_satellite  = scorer_satellite.get_top_n(ranked_satellite, n=1)
+        old_satellite    = portfolio_satellite.get_current_allocation()
+
         # Substitution défensive si aucun ETF éligible (Antonacci)
         if not top_n_macro:
             logger.info("[macro]     Aucun ETF éligible — position défensive IEF")
@@ -97,13 +103,20 @@ def main() -> None:
         portfolio_thematic.update_allocation(top_n_thematic)
         new_thematic = portfolio_thematic.get_current_allocation()
 
+        portfolio_satellite.update_allocation(top_n_satellite)
+        new_satellite = portfolio_satellite.get_current_allocation()
+
         logger.info(
-            f"[macro]    {[h['ticker'] for h in old_macro] or ['(vide)']} "
+            f"[macro]     {[h['ticker'] for h in old_macro] or ['(vide)']} "
             f"→ {[h['ticker'] for h in new_macro]}"
         )
         logger.info(
-            f"[thematic] {[h['ticker'] for h in old_thematic] or ['(vide)']} "
+            f"[thematic]  {[h['ticker'] for h in old_thematic] or ['(vide)']} "
             f"→ {[h['ticker'] for h in new_thematic]}"
+        )
+        logger.info(
+            f"[satellite] {[h['ticker'] for h in old_satellite] or ['(vide)']} "
+            f"→ {[h['ticker'] for h in new_satellite]}"
         )
 
         # 4. Email de confirmation
@@ -116,6 +129,9 @@ def main() -> None:
             old_thematic=[h["ticker"] for h in old_thematic],
             new_thematic=[h["ticker"] for h in new_thematic],
             top_n_thematic=top_n_thematic,
+            old_satellite=[h["ticker"] for h in old_satellite],
+            new_satellite=[h["ticker"] for h in new_satellite],
+            top_n_satellite=top_n_satellite,
             run_date=date.today(),
         )
         sender.send(subject, html)
@@ -165,6 +181,9 @@ def _generate_confirmation_email(
     old_thematic: list[str],
     new_thematic: list[str],
     top_n_thematic: list[dict],
+    old_satellite: list[str],
+    new_satellite: list[str],
+    top_n_satellite: list[dict],
     run_date: date,
 ) -> str:
 
@@ -175,9 +194,11 @@ def _generate_confirmation_email(
 
     old_m_str, new_m_str   = _transition(old_macro, new_macro)
     old_th_str, new_th_str = _transition(old_thematic, new_thematic)
+    old_s_str, new_s_str   = _transition(old_satellite, new_satellite)
 
-    macro_rows    = _allocation_rows(top_n_macro)
-    thematic_rows = _allocation_rows(top_n_thematic)
+    macro_rows     = _allocation_rows(top_n_macro)
+    thematic_rows  = _allocation_rows(top_n_thematic)
+    satellite_rows = _allocation_rows(top_n_satellite)
 
     css = """
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -279,6 +300,30 @@ def _generate_confirmation_email(
         <th style="text-align:right;">Score</th>
       </tr></thead>
       <tbody>{thematic_rows}</tbody>
+    </table>
+  </div>
+
+  <!-- Satellite -->
+  <div class="strat-label">Satellite — Managed Futures</div>
+
+  <div class="signal" style="margin-bottom:16px;">
+    <div class="signal-body">
+      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px;">Avant</span><br>
+      {old_s_str}<br><br>
+      <span style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px;">Après</span><br>
+      <strong>{new_s_str}</strong>
+    </div>
+  </div>
+
+  <div style="margin-bottom:32px;">
+    <div class="section-label" style="margin-bottom:0;">Nouvelle allocation</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Ticker</th><th>Nom</th>
+        <th style="text-align:right;">Poids</th>
+        <th style="text-align:right;">Score</th>
+      </tr></thead>
+      <tbody>{satellite_rows}</tbody>
     </table>
   </div>
 
