@@ -39,6 +39,23 @@ logger = logging.getLogger(__name__)
 CONFIG = ROOT / "config"
 DATA   = ROOT / "data"
 
+# Position défensive : utilisée quand aucun ETF ne passe le filtre MA (Antonacci)
+_DEFENSIVE = {
+    "ticker": "IEF",
+    "name": "iShares 7-10 Year Treasury Bond ETF",
+    "sector": "Obligations",
+    "region": "Défensif",
+    "score": None,
+    "ret_1m": None,
+    "ret_3m": None,
+    "ret_6m": None,
+    "above_ma": True,
+    "current_price": None,
+    "ma": None,
+    "status": "✓",
+    "_defensive": True,
+}
+
 
 def main() -> None:
     logger.info("═" * 60)
@@ -70,6 +87,14 @@ def main() -> None:
         top_n_thematic    = scorer_thematic.get_top_n(ranked_thematic, n=2)
         current_thematic  = portfolio_thematic.get_current_allocation()
         needs_rb_thematic = portfolio_thematic.needs_rebalancing(top_n_thematic)
+
+        # Substitution défensive si aucun ETF éligible (Antonacci)
+        if not top_n_macro:
+            logger.info("[macro]     Aucun ETF éligible — position défensive IEF")
+            top_n_macro = [dict(_DEFENSIVE)]
+        if not top_n_thematic:
+            logger.info("[thematic]  Aucun ETF éligible — position défensive IEF")
+            top_n_thematic = [dict(_DEFENSIVE)]
 
         def _action(needs_rb, current):
             if not current:   return "INITIALISER"

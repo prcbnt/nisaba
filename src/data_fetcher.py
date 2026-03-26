@@ -35,6 +35,14 @@ class DataFetcher:
         self.fx_ticker: str = self._ticker_cfg["fx_ticker"]
         self.fetch_period_days: int = self._settings["data"]["fetch_period_days"]
 
+        # Tickers défensifs (un par stratégie, typiquement IEF)
+        strategies = self._settings.get("strategies", {})
+        self.defensive_tickers: list[str] = list({
+            cfg.get("defensive_ticker")
+            for cfg in strategies.values()
+            if cfg.get("defensive_ticker")
+        })
+
     # ──────────────────────────────────────────────────────────────────────────
     # API publique
     # ──────────────────────────────────────────────────────────────────────────
@@ -59,6 +67,7 @@ class DataFetcher:
         all_tickers = (
             [etf["ticker"] for etf in self.universe]
             + [etf["ticker"] for etf in self.universe_thematic]
+            + self.defensive_tickers
             + [self.benchmark, self.fx_ticker]
         )
         all_tickers = list(dict.fromkeys(all_tickers))  # dédoublonnage, ordre préservé

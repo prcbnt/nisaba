@@ -45,12 +45,18 @@ class PortfolioManager:
 
     def update_allocation(self, top_n: list[dict]) -> None:
         old = self.get_current_allocation()
+        n_entries = len(top_n[:2])
+        weight = round(1.0 / n_entries, 6) if n_entries > 0 else 0.5
         new = [
             {
                 "ticker":         etf["ticker"],
                 "name":           etf["name"],
-                "weight":         0.5,
-                "score_at_entry": round(float(etf["score"]), 6) if pd.notna(etf["score"]) else None,
+                "weight":         weight,
+                "score_at_entry": (
+                    round(float(etf["score"]), 6)
+                    if etf.get("score") is not None and pd.notna(etf["score"])
+                    else None
+                ),
                 "entry_date":     str(date.today()),
             }
             for etf in top_n[:2]

@@ -34,6 +34,23 @@ logger = logging.getLogger(__name__)
 CONFIG = ROOT / "config"
 DATA   = ROOT / "data"
 
+# Position défensive : utilisée quand aucun ETF ne passe le filtre MA (Antonacci)
+_DEFENSIVE = {
+    "ticker": "IEF",
+    "name": "iShares 7-10 Year Treasury Bond ETF",
+    "sector": "Obligations",
+    "region": "Défensif",
+    "score": None,
+    "ret_1m": None,
+    "ret_3m": None,
+    "ret_6m": None,
+    "above_ma": True,
+    "current_price": None,
+    "ma": None,
+    "status": "✓",
+    "_defensive": True,
+}
+
 
 def main() -> None:
     logger.info("═" * 60)
@@ -64,6 +81,14 @@ def main() -> None:
         ranked_thematic = scorer_thematic.compute_scores(prices)
         top_n_thematic  = scorer_thematic.get_top_n(ranked_thematic, n=2)
         old_thematic    = portfolio_thematic.get_current_allocation()
+
+        # Substitution défensive si aucun ETF éligible (Antonacci)
+        if not top_n_macro:
+            logger.info("[macro]     Aucun ETF éligible — position défensive IEF")
+            top_n_macro = [dict(_DEFENSIVE)]
+        if not top_n_thematic:
+            logger.info("[thematic]  Aucun ETF éligible — position défensive IEF")
+            top_n_thematic = [dict(_DEFENSIVE)]
 
         # 3. Mise à jour des états
         portfolio_macro.update_allocation(top_n_macro)
@@ -118,6 +143,8 @@ def _pct(value, decimals: int = 1) -> str:
 def _allocation_rows(top_n: list[dict]) -> str:
     if not top_n:
         return '<tr><td colspan="5" style="color:#999;text-align:center;padding:12px;">Aucun ETF éligible — cash</td></tr>'
+    n = len(top_n[:2])
+    weight_pct = f"{100 // n}%"
     rows = ""
     for i, etf in enumerate(top_n[:2], 1):
         rows += f"""
@@ -125,7 +152,7 @@ def _allocation_rows(top_n: list[dict]) -> str:
           <td style="font-size:11px;color:#999;padding:7px 10px;">Top {i}</td>
           <td style="padding:7px 10px;"><strong>{etf['ticker']}</strong></td>
           <td style="font-size:11px;color:#555;padding:7px 10px;">{etf['name']}</td>
-          <td style="text-align:right;padding:7px 10px;">50%</td>
+          <td style="text-align:right;padding:7px 10px;">{weight_pct}</td>
           <td style="text-align:right;font-weight:700;padding:7px 10px;">{_pct(etf.get('score'))}</td>
         </tr>"""
     return rows

@@ -12,6 +12,7 @@ strategies:
     ma_filter_days: 200     # Filtre strict pour les marchés larges
     top_n: 2
     weights: [0.5, 0.5]
+    defensive_ticker: "IEF"  # Fallback si aucun ETF > MM200 (Antonacci)
 
   thematic:
     # Signal 1M + 3M sans skip — fenêtre plus courte pour ETFs volatils/tendanciels
@@ -23,6 +24,7 @@ strategies:
     ma_filter_days: 150     # Filtre plus souple : ETFs thématiques sortent plus vite des bear markets
     top_n: 2
     weights: [0.5, 0.5]
+    defensive_ticker: "IEF"  # Fallback si aucun ETF > MM150
 
 # ── Paramètres legacy (utilisés par backtester.py) ────────────────────────────
 momentum:

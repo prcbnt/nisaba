@@ -291,9 +291,23 @@ def _weekly_strategy_block(
     target_tickers  = {e["ticker"] for e in top_n[:2]}
     needs_rb     = (current_tickers != target_tickers) if top_n else False
     needs_action = needs_rb or (not current and bool(top_n))
+    is_defensive = bool(top_n) and top_n[0].get("_defensive", False)
 
     # ── Signal ────────────────────────────────────────────────────────────────
-    if not top_n:
+    if is_defensive:
+        if top_n[0]["ticker"] in current_tickers and not needs_rb:
+            signal_html = f"""
+        <div class="signal">
+          <div class="signal-title">Position défensive — IEF maintenu</div>
+          <div class="signal-body">Aucun ETF > {ma_label}. Conserver IEF (obligations 7-10 ans US).</div>
+        </div>"""
+        else:
+            signal_html = f"""
+        <div class="signal invert">
+          <div class="signal-title">Position défensive — IEF</div>
+          <div class="signal-body">Aucun ETF de l'univers ne passe le filtre {ma_label}. Allouer 100% vers IEF (obligations 7-10 ans US).</div>
+        </div>"""
+    elif not top_n:
         signal_html = f"""
         <div class="signal">
           <div class="signal-title">Aucun ETF éligible</div>
@@ -330,6 +344,9 @@ def _weekly_strategy_block(
         all_tickers_ordered = list(target_tickers) + [
             t for t in current_tickers if t not in target_tickers
         ]
+        top_n_by_ticker = {e["ticker"]: e for e in top_n}
+        n_target = len(target_tickers)
+        weight_pct = f"{100 // n_target}%" if n_target > 0 else "—"
         rows = ""
         for ticker in all_tickers_ordered:
             in_current = ticker in current_tickers
@@ -342,7 +359,10 @@ def _weekly_strategy_block(
                 else None
             )
             score = float(row_data["score"].iloc[0]) if not row_data.empty else None
-            name  = row_data["name"].iloc[0]          if not row_data.empty else ticker
+            name  = (
+                row_data["name"].iloc[0] if not row_data.empty
+                else top_n_by_ticker.get(ticker, {}).get("name", ticker)
+            )
 
             if in_current and in_target:
                 action    = '<span style="font-weight:700;">Conserver</span>'
@@ -358,7 +378,7 @@ def _weekly_strategy_block(
             <tr>
               <td{row_style}><strong>{_ht(ticker)}</strong></td>
               <td{row_style} style="font-size:11px;{'color:#999;' if not in_target else ''}">{name}</td>
-              <td class="num"{row_style}>{"50%" if in_target else "—"}</td>
+              <td class="num"{row_style}>{weight_pct if in_target else "—"}</td>
               <td class="num" style="{_weight(col1_val) if in_target else 'color:#999;'}">{_pct(col1_val)}</td>
               <td class="num" style="{_weight(score) if in_target else 'color:#999;'}">{_pct(score)}</td>
               <td style="font-size:11px;">{action}</td>
@@ -450,9 +470,23 @@ def _monthly_strategy_block(
     new_tickers     = {e["ticker"] for e in top_n[:2]}
     needs_rb        = current_tickers != new_tickers
     needs_action    = needs_rb or (not current and bool(top_n))
+    is_defensive    = bool(top_n) and top_n[0].get("_defensive", False)
 
     # ── Signal ────────────────────────────────────────────────────────────────
-    if not top_n:
+    if is_defensive:
+        if top_n[0]["ticker"] in current_tickers and not needs_rb:
+            signal_html = f"""
+        <div class="signal">
+          <div class="signal-title">Position défensive — IEF maintenu</div>
+          <div class="signal-body">Aucun ETF > {ma_label}. Conserver IEF (obligations 7-10 ans US).</div>
+        </div>"""
+        else:
+            signal_html = f"""
+        <div class="signal invert" style="margin-bottom:8px;">
+          <div class="signal-title">Position défensive — IEF</div>
+          <div class="signal-body">Aucun ETF de l'univers ne passe le filtre {ma_label}. Allouer 100% vers IEF (obligations 7-10 ans US).</div>
+        </div>"""
+    elif not top_n:
         signal_html = f"""
         <div class="signal">
           <div class="signal-title">Aucun ETF éligible</div>
@@ -484,6 +518,8 @@ def _monthly_strategy_block(
 
     # ── Top 2 cards ───────────────────────────────────────────────────────────
     top2_html = ""
+    n_top = len(top_n[:2])
+    top_weight_pct = f"{100 // n_top}%" if n_top > 0 else "—"
     for i, etf in enumerate(top_n[:2], 1):
         is_new = etf["ticker"] not in current_tickers
         badge  = (
@@ -495,7 +531,7 @@ def _monthly_strategy_block(
         m2_val = etf.get(top2_m2_key)
         top2_html += f"""
         <div class="top-block">
-          <div class="top-rank">Top {i} &mdash; 50%</div>
+          <div class="top-rank">Top {i} &mdash; {top_weight_pct}</div>
           <div class="top-ticker">{_ht(etf['ticker'])}{badge}</div>
           <div class="top-name">{etf['name']}</div>
           <div class="top-metrics">
