@@ -25,7 +25,11 @@ _SMTP_PORT = 587
 class EmailSender:
     def __init__(self, config_path: Path | None = None):
         self.sender       = os.environ.get("GMAIL_SENDER", "").strip()
-        self.app_password = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
+        # Supprime tous les espaces blancs (espaces, tabs, retours à la ligne)
+        # pour éviter les problèmes de copier-coller depuis un secret GitHub
+        import re
+        raw = os.environ.get("GMAIL_APP_PASSWORD", "")
+        self.app_password = re.sub(r"\s", "", raw)
 
         recipient_env = os.environ.get("EMAIL_RECIPIENT", "").strip()
         if recipient_env:
@@ -36,6 +40,8 @@ class EmailSender:
             self.recipient = cfg["email"]["recipient"]
         else:
             self.recipient = "pebeneteau@gmail.com"
+
+        logger.info(f"EmailSender — sender={self.sender!r}  app_password_len={len(self.app_password)}")
 
         missing = [
             name for name, val in [
