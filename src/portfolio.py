@@ -76,6 +76,38 @@ class PortfolioManager:
         new_tickers     = {e["ticker"] for e in top_n[:2]}
         return current_tickers != new_tickers
 
+    def compute_daily_performance(self, prices: pd.DataFrame) -> dict:
+        """Retourne J-1 et perf depuis entry_date pour chaque position."""
+        allocation = self.get_current_allocation()
+        if not allocation:
+            return {}
+        results = {}
+        for holding in allocation:
+            ticker = holding["ticker"]
+            base = {
+                "name":            holding["name"],
+                "weight":          holding["weight"],
+                "entry_date":      holding.get("entry_date"),
+                "ret_1d":          None,
+                "ret_since_entry": None,
+            }
+            if ticker not in prices.columns:
+                results[ticker] = base
+                continue
+            series = prices[ticker].dropna()
+            if len(series) >= 2:
+                base["ret_1d"] = float(series.iloc[-1] / series.iloc[-2] - 1)
+            entry_date = holding.get("entry_date")
+            if entry_date and len(series) >= 1:
+                try:
+                    entry_price = float(series.asof(pd.Timestamp(entry_date)))
+                    if entry_price and not pd.isna(entry_price) and entry_price > 0:
+                        base["ret_since_entry"] = float(series.iloc[-1] / entry_price - 1)
+                except Exception:
+                    pass
+            results[ticker] = base
+        return results
+
     def compute_weekly_performance(self, prices: pd.DataFrame) -> dict:
         allocation = self.get_current_allocation()
         if not allocation:

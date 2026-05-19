@@ -991,3 +991,147 @@ def generate_monthly_report(
   </div>
 </body>
 </html>"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Email quotidien
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _daily_strategy_rows(label: str, portfolio_weight: float, perf: dict) -> str:
+    """Génère les lignes HTML pour une stratégie dans le tableau quotidien."""
+    if not perf:
+        return (
+            f'<tr style="background:#f5f5f5;">'
+            f'<td style="font-size:10px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.8px;padding:9px 10px;color:#000;">{label}</td>'
+            f'<td style="font-size:11px;padding:9px 10px;color:#999;" colspan="4">'
+            f'Pas encore de position</td>'
+            f'<td class="num" style="padding:9px 10px;font-size:11px;color:#999;">'
+            f'{int(portfolio_weight * 100)}%</td></tr>'
+        )
+
+    rows = ""
+    for i, (ticker, h) in enumerate(perf.items()):
+        is_first = i == 0
+        bg = "background:#f5f5f5;" if is_first else ""
+
+        entry_str = ""
+        if h.get("entry_date"):
+            try:
+                from datetime import datetime as _dt
+                d = _dt.strptime(h["entry_date"], "%Y-%m-%d")
+                entry_str = (
+                    f'<span style="font-size:9px;color:#999;margin-left:6px;">'
+                    f'depuis {d.strftime("%d/%m/%y")}</span>'
+                )
+            except Exception:
+                pass
+
+        ret_1d_str    = _pct(h.get("ret_1d"))
+        ret_entry_str = _pct(h.get("ret_since_entry"))
+        w_style_1d    = _weight(h.get("ret_1d"))
+        w_style_entry = _weight(h.get("ret_since_entry"))
+        pos_pct  = f"{int(h['weight'] * 100)}%"
+        port_pct = f"{int(portfolio_weight * 100)}%" if is_first else ""
+
+        rows += (
+            f'<tr style="{bg}">'
+            f'<td style="font-size:10px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.8px;padding:9px 10px;color:#000;{bg}">'
+            f'{"" if not is_first else label}</td>'
+            f'<td style="padding:9px 10px;{bg}"><strong>{_ht(ticker)}</strong><br>'
+            f'<span style="font-size:11px;color:#555;">{h["name"]}</span></td>'
+            f'<td class="num" style="padding:9px 10px;font-size:11px;color:#999;{bg}">{pos_pct}</td>'
+            f'<td class="num" style="padding:9px 10px;{bg}">'
+            f'<span style="{w_style_1d}">{ret_1d_str}</span></td>'
+            f'<td class="num" style="padding:9px 10px;{bg}">'
+            f'<span style="{w_style_entry}">{ret_entry_str}</span>{entry_str}</td>'
+            f'<td class="num" style="padding:9px 10px;font-weight:700;{bg}">{port_pct}</td>'
+            f'</tr>'
+        )
+    return rows
+
+
+def generate_daily_report(
+    perf_macro:        dict,
+    perf_thematic:     dict,
+    perf_satellite:    dict,
+    portfolio_weights: dict,
+    spy_ret_1d:        "float | None",
+    ief_ret_1d:        "float | None",
+    run_date=None,
+) -> str:
+    from datetime import date as _date
+    run_date = run_date or _date.today()
+
+    w_macro     = portfolio_weights.get("macro",     0.45)
+    w_thematic  = portfolio_weights.get("thematic",  0.45)
+    w_satellite = portfolio_weights.get("satellite", 0.10)
+
+    macro_rows     = _daily_strategy_rows("Macro",      w_macro,     perf_macro)
+    thematic_rows  = _daily_strategy_rows("Thématique", w_thematic,  perf_thematic)
+    satellite_rows = _daily_strategy_rows("Satellite",  w_satellite, perf_satellite)
+
+    spy_style = _weight(spy_ret_1d)
+    ief_style = _weight(ief_ret_1d)
+
+    _css_extra = (
+        ".footer{margin-top:40px;padding-top:12px;border-top:1px solid #000;"
+        "font-size:10px;color:#999;text-transform:uppercase;letter-spacing:0.5px;}"
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nisaba - Suivi {run_date.strftime('%d/%m/%Y')}</title>
+  <style>{_BASE_CSS} {_css_extra}</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="masthead-title">Nisab&#257;</div>
+    <div class="masthead-sub">Suivi quotidien &mdash; {run_date.strftime('%d/%m/%Y')}</div>
+  </div>
+
+  <div class="section-label" style="margin-bottom:0;">Portefeuille</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:100px;">Strat&eacute;gie</th>
+        <th>Position</th>
+        <th class="num">Poids</th>
+        <th class="num">J-1</th>
+        <th class="num">Depuis entr&eacute;e</th>
+        <th class="num">Port.</th>
+      </tr>
+    </thead>
+    <tbody>
+      {macro_rows}
+      {thematic_rows}
+      {satellite_rows}
+      <tr>
+        <td style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;color:#999;border-top:2px solid #000;">Benchmark</td>
+        <td style="padding:9px 10px;border-top:2px solid #000;"><strong>SPY</strong><br><span style="font-size:11px;color:#555;">SPDR S&amp;P 500 ETF</span></td>
+        <td class="num" style="padding:9px 10px;font-size:11px;color:#999;border-top:2px solid #000;">&mdash;</td>
+        <td class="num" style="padding:9px 10px;border-top:2px solid #000;"><span style="{spy_style}">{_pct(spy_ret_1d)}</span></td>
+        <td class="num" style="padding:9px 10px;color:#999;border-top:2px solid #000;">&mdash;</td>
+        <td class="num" style="padding:9px 10px;border-top:2px solid #000;">&mdash;</td>
+      </tr>
+      <tr>
+        <td style="font-size:10px;padding:9px 10px;color:#999;"></td>
+        <td style="padding:9px 10px;"><strong>IEF</strong><br><span style="font-size:11px;color:#555;">iShares 7-10Y Treasury</span></td>
+        <td class="num" style="padding:9px 10px;font-size:11px;color:#999;">&mdash;</td>
+        <td class="num" style="padding:9px 10px;"><span style="{ief_style}">{_pct(ief_ret_1d)}</span></td>
+        <td class="num" style="padding:9px 10px;color:#999;">&mdash;</td>
+        <td class="num" style="padding:9px 10px;">&mdash;</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Nisab&#257; &mdash; {run_date.strftime('%d/%m/%Y')} &mdash; Suivi quotidien &mdash;
+    Macro (45%) &middot; Th&eacute;matique (45%) &middot; Satellite DBMF (10%)
+  </div>
+</body>
+</html>"""

@@ -1,0 +1,40 @@
+name: Nisabā — Daily Watch
+
+on:
+  schedule:
+    # Mardi–Vendredi à 07h30 UTC (08h30 Paris hiver, 09h30 été)
+    # Lundi est géré par monday.yml (rapport hebdo/mensuel)
+    - cron: '30 7 * * 2-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  daily-watch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily watch
+        env:
+          GMAIL_CLIENT_ID:     ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_SENDER:        ${{ secrets.GMAIL_SENDER }}
+          EMAIL_RECIPIENT:     ${{ secrets.EMAIL_RECIPIENT }}
+        run: python scripts/run_daily.py
