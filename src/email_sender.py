@@ -1,20 +1,12 @@
 """
-email_sender.py — Envoi des emails via Gmail API avec authentification OAuth2.
-
-Fonctionnement :
-  - Au premier lancement (local) : scripts/setup_gmail_oauth.py génère un refresh token
-  - En production (GitHub Actions) : le refresh token est stocké dans les secrets GitHub
-  - Le token d'accès est renouvelé automatiquement à chaque run
+email_sender.py — Envoi des emails via Gmail SMTP + App Password.
 
 Variables d'environnement requises :
-  GMAIL_CLIENT_ID       → Client ID OAuth2 (depuis Google Cloud Console)
-  GMAIL_CLIENT_SECRET   → Client Secret OAuth2
-  GMAIL_REFRESH_TOKEN   → Refresh token généré par setup_gmail_oauth.py
-  GMAIL_SENDER          → Adresse Gmail associée aux credentials OAuth2
-  EMAIL_RECIPIENT       → (optionnel) override du destinataire défini dans settings.yaml
+  GMAIL_SENDER        → Adresse Gmail expéditrice
+  GMAIL_APP_PASSWORD  → App Password généré dans Google Account → Security
+  EMAIL_RECIPIENT     → (optionnel) override du destinataire défini dans settings.yaml
 """
 
-import base64
 import logging
 import os
 import smtplib
@@ -23,26 +15,18 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 import yaml
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 
 logger = logging.getLogger(__name__)
 
 _SMTP_HOST = "smtp.gmail.com"
 _SMTP_PORT = 587
-_TOKEN_URI = "https://oauth2.googleapis.com/token"
-_SCOPES = ["https://mail.google.com/"]
 
 
 class EmailSender:
     def __init__(self, config_path: Path | None = None):
-        # Credentials OAuth2
-        self.client_id = os.environ.get("GMAIL_CLIENT_ID", "").strip()
-        self.client_secret = os.environ.get("GMAIL_CLIENT_SECRET", "").strip()
-        self.refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN", "").strip()
-        self.sender = os.environ.get("GMAIL_SENDER", "").strip()
+        self.sender       = os.environ.get("GMAIL_SENDER", "").strip()
+        self.app_password = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
 
-        # Destinataire
         recipient_env = os.environ.get("EMAIL_RECIPIENT", "").strip()
         if recipient_env:
             self.recipient = recipient_env
@@ -55,18 +39,15 @@ class EmailSender:
 
         missing = [
             name for name, val in [
-                ("GMAIL_CLIENT_ID", self.client_id),
-                ("GMAIL_CLIENT_SECRET", self.client_secret),
-                ("GMAIL_REFRESH_TOKEN", self.refresh_token),
                 ("GMAIL_SENDER", self.sender),
+                ("GMAIL_APP_PASSWORD", self.app_password),
             ] if not val
         ]
         if missing:
             raise EnvironmentError(
                 f"Variables d'environnement manquantes : {', '.join(missing)}\n"
-                "→ En local : exporter les variables (voir README).\n"
-                "→ GitHub Actions : ajouter les secrets dans Settings → Secrets and variables → Actions.\n"
-                "→ Pour obtenir le refresh token : python scripts/setup_gmail_oauth.py"
+                "→ En local : exporter GMAIL_SENDER et GMAIL_APP_PASSWORD.\n"
+                "→ GitHub Actions : ajouter les secrets dans Settings → Secrets and variables → Actions."
             )
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -74,10 +55,9 @@ class EmailSender:
     # ──────────────────────────────────────────────────────────────────────────
 
     def send(self, subject: str, html_body: str) -> None:
-        """Envoie un email HTML au destinataire configuré via Gmail OAuth2."""
-        access_token = self._get_access_token()
+        """Envoie un email HTML au destinataire configuré via Gmail SMTP."""
         msg = self._build_message(subject, html_body)
-        self._send_via_smtp(msg, access_token)
+        self._send_via_smtp(msg)
         logger.info(f"Email envoyé : « {subject} » → {self.recipient}")
 
     def send_alert(self, error_message: str) -> None:
@@ -103,36 +83,18 @@ class EmailSender:
     # Méthodes internes
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _get_access_token(self) -> str:
-        """Utilise le refresh token pour obtenir un access token valide."""
-        creds = Credentials(
-            token=None,
-            refresh_token=self.refresh_token,
-            token_uri=_TOKEN_URI,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            scopes=_SCOPES,
-        )
-        creds.refresh(Request())
-        return creds.token
-
     def _build_message(self, subject: str, html_body: str) -> MIMEMultipart:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = self.sender
-        msg["To"] = self.recipient
+        msg["From"]    = self.sender
+        msg["To"]      = self.recipient
         msg.attach(MIMEText(html_body, "html", "utf-8"))
         return msg
 
-    def _send_via_smtp(self, msg: MIMEMultipart, access_token: str) -> None:
-        """Envoie via SMTP Gmail avec XOAUTH2."""
-        # Format XOAUTH2 : user=<email>\x01auth=Bearer <token>\x01\x01
-        auth_string = f"user={self.sender}\x01auth=Bearer {access_token}\x01\x01"
-        auth_b64 = base64.b64encode(auth_string.encode()).decode()
-
-        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
+    def _send_via_smtp(self, msg: MIMEMultipart) -> None:
+        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
-            server.docmd("AUTH", f"XOAUTH2 {auth_b64}")
+            server.login(self.sender, self.app_password)
             server.sendmail(self.sender, self.recipient, msg.as_string())
